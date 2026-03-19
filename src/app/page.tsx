@@ -372,6 +372,9 @@ export default function Home() {
   // ── Image view state ──────────────────────────────────────────────────────────
   const [imgFitHeight, setImgFitHeight] = useState(false)
 
+  // ── Pixel inspector ───────────────────────────────────────────────────────────
+  const [pixelInfo, setPixelInfo] = useState<{ r: number; g: number; b: number; clientX: number; clientY: number } | null>(null)
+
   // Derived
   const wheelMaxR = wheelSize / 2 - 20
 
@@ -558,6 +561,20 @@ export default function Home() {
 
   const onWheelMouseLeave = useCallback(() => setWheelHovered(null), [])
 
+  // ── Image pixel inspector ─────────────────────────────────────────────────────
+
+  const onImgMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = imageCanvasRef.current; if (!canvas || !image) return
+    const rect = canvas.getBoundingClientRect()
+    const x = Math.floor((e.clientX - rect.left) * (image.width / rect.width))
+    const y = Math.floor((e.clientY - rect.top) * (image.height / rect.height))
+    if (x < 0 || x >= image.width || y < 0 || y >= image.height) return
+    const idx = (y * image.width + x) * 4
+    setPixelInfo({ r: image.pixels[idx], g: image.pixels[idx+1], b: image.pixels[idx+2], clientX: e.clientX, clientY: e.clientY })
+  }, [image])
+
+  const onImgMouseLeave = useCallback(() => setPixelInfo(null), [])
+
   const switchMode = useCallback((m: HistMode) => {
     setHistMode(m); setHoveredValue(null); setRangeSelection(null)
     setMultiRanges([]); setActiveDrag(null); setIsDragging(false)
@@ -624,9 +641,11 @@ export default function Home() {
             <canvas
               ref={imageCanvasRef}
               width={image.width} height={image.height}
-              className={['rounded-xl shadow-2xl shadow-black/60',
+              className={['rounded-xl shadow-2xl shadow-black/60 cursor-crosshair',
                 imgFitHeight ? '' : 'max-w-full max-h-full'].join(' ')}
               style={imgCanvasStyle}
+              onMouseMove={onImgMouseMove}
+              onMouseLeave={onImgMouseLeave}
             />
           </div>
 
@@ -744,6 +763,34 @@ export default function Home() {
 
           </div>
         </div>
+
+        {/* Pixel inspector tooltip */}
+        {pixelInfo && (() => {
+          const { r, g, b, clientX, clientY } = pixelInfo
+          const brightness = Math.round(0.299*r + 0.587*g + 0.114*b)
+          const hex = `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`
+          const flipX = clientX > window.innerWidth * 0.45
+          const flipY = clientY > window.innerHeight * 0.75
+          return (
+            <div
+              className="fixed z-50 pointer-events-none select-none"
+              style={{ left: flipX ? clientX - 168 : clientX + 14, top: flipY ? clientY - 110 : clientY + 14 }}
+            >
+              <div className="bg-black/85 border border-white/15 rounded-xl px-3 py-2.5 text-xs font-mono text-white backdrop-blur-sm shadow-xl w-40">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-5 h-5 rounded-md border border-white/20 shrink-0" style={{ background: hex }} />
+                  <span className="text-white/90 font-semibold tracking-wider">{hex.toUpperCase()}</span>
+                </div>
+                <div className="space-y-0.5 text-white/60">
+                  <div className="flex justify-between"><span className="text-red-400">R</span><span>{r}</span></div>
+                  <div className="flex justify-between"><span className="text-green-400">G</span><span>{g}</span></div>
+                  <div className="flex justify-between"><span className="text-blue-400">B</span><span>{b}</span></div>
+                  <div className="flex justify-between border-t border-white/10 pt-0.5 mt-1"><span className="text-white/40">lum</span><span>{brightness}</span></div>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </main>
     )
   }
