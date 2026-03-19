@@ -42,11 +42,14 @@ function computeHistCounts(pixels: Uint8ClampedArray): HistCounts {
   return { r, g, b, max }
 }
 
+interface VisibleChannels { r: boolean; g: boolean; b: boolean }
+
 function drawHistogram(
   canvas: HTMLCanvasElement,
   counts: HistCounts,
   ranges: [number, number][],
-  crosshairAt?: number
+  crosshairAt?: number,
+  visibleChannels: VisibleChannels = { r: true, g: true, b: true }
 ) {
   const W = canvas.width, H = canvas.height
   const { top, right, bottom, left } = HIST_PAD
@@ -89,7 +92,8 @@ function drawHistogram(
   ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1
   ctx.beginPath(); ctx.moveTo(left,top); ctx.lineTo(left,top+pH); ctx.lineTo(left+pW,top+pH); ctx.stroke()
 
-  for (const [data, color] of [[counts.r,'rgba(255,80,80,0.9)'],[counts.g,'rgba(80,220,80,0.9)'],[counts.b,'rgba(80,140,255,0.9)']] as [Uint32Array,string][]) {
+  for (const [data, color, key] of [[counts.r,'rgba(255,80,80,0.9)','r'],[counts.g,'rgba(80,220,80,0.9)','g'],[counts.b,'rgba(80,140,255,0.9)','b']] as [Uint32Array,string,keyof VisibleChannels][]) {
+    if (!visibleChannels[key]) continue
     ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.lineJoin='round'
     for (let v = 0; v < 256; v++) {
       const x = left + (v/255)*pW, y = top + pH - (data[v]/counts.max)*pH
@@ -128,8 +132,9 @@ function drawHistogram(
   ctx.save(); ctx.translate(14,top+pH/2); ctx.rotate(-Math.PI/2)
   ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.fillText('Count',0,0); ctx.restore()
 
-  for (const [i,lbl,col] of [[0,'R','rgba(255,80,80,0.9)'],[1,'G','rgba(80,220,80,0.9)'],[2,'B','rgba(80,140,255,0.9)']] as [number,string,string][]) {
-    ctx.fillStyle=col; ctx.font='bold 12px monospace'; ctx.textAlign='left'
+  for (const [i,lbl,col,key] of [[0,'R','rgba(255,80,80,0.9)','r'],[1,'G','rgba(80,220,80,0.9)','g'],[2,'B','rgba(80,140,255,0.9)','b']] as [number,string,string,keyof VisibleChannels][]) {
+    ctx.fillStyle = visibleChannels[key] ? col : 'rgba(255,255,255,0.18)'
+    ctx.font='bold 12px monospace'; ctx.textAlign='left'
     ctx.fillText(lbl, left+i*24, top-8)
   }
 }
@@ -369,6 +374,19 @@ export default function Home() {
   const [wheelSize, setWheelSize] = useState(420)
   const [wheelCursorR, setWheelCursorR] = useState(20)
 
+  // ── Channel visibility ────────────────────────────────────────────────────────
+  const [visibleChannels, setVisibleChannels] = useState<VisibleChannels>({ r: true, g: true, b: true })
+
+  const toggleChannel = useCallback((ch: keyof VisibleChannels) => {
+    setVisibleChannels(prev => {
+      // If the clicked channel is ON and at least one other is OFF → reset all to ON
+      if (prev[ch] && (!prev.r || !prev.g || !prev.b)) return { r: true, g: true, b: true }
+      return { ...prev, [ch]: !prev[ch] }
+    })
+  }, [])
+
+  const enableAllChannels = useCallback(() => setVisibleChannels({ r: true, g: true, b: true }), [])
+
   // ── Image view state ──────────────────────────────────────────────────────────
   const [imgFitHeight, setImgFitHeight] = useState(false)
 
@@ -434,7 +452,7 @@ export default function Home() {
   useEffect(() => {
     if (!image) return
     histCountsRef.current = computeHistCounts(image.pixels)
-    if (histRef.current) drawHistogram(histRef.current, histCountsRef.current, [])
+    if (histRef.current) drawHistogram(histRef.current, histCountsRef.current, [], undefined, visibleChannels)
     if (wheelRef.current) {
       drawColorWheel(wheelRef.current, image.pixels)
       wheelBGRef.current = wheelRef.current.getContext('2d')!.getImageData(0, 0, wheelSize, wheelSize)
@@ -451,9 +469,9 @@ export default function Home() {
     const crosshair = histMode === 'hover' ? (hoveredValue ?? undefined) : undefined
     if (rafHistRef.current) cancelAnimationFrame(rafHistRef.current)
     rafHistRef.current = requestAnimationFrame(() =>
-      drawHistogram(histRef.current!, histCountsRef.current!, ranges, crosshair)
+      drawHistogram(histRef.current!, histCountsRef.current!, ranges, crosshair, visibleChannels)
     )
-  }, [histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag, getHistRanges])
+  }, [histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag, getHistRanges, visibleChannels])
 
   // Image redraw: wheel hover takes precedence over histogram ranges
   useEffect(() => {
@@ -655,12 +673,49 @@ export default function Home() {
             {/* Histogram */}
             <div>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold uppercase tracking-widest text-white/35">
-                  Pixel Value Histogram
-                  {rangeLabel && !wheelHovered && (
-                    <span className="ml-2 normal-case font-normal tracking-normal text-white/50">— {rangeLabel}</span>
-                  )}
-                </p>
+                <div className="flex items-center gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-white/35">
+                    Pixel Value Histogram
+                    {rangeLabel && !wheelHovered && (
+                      <span className="ml-2 normal-case font-normal tracking-normal text-white/50">— {rangeLabel}</span>
+                    )}
+                  </p>
+                  {/* Channel toggles */}
+                  <div className="flex items-center gap-1.5">
+                    {([['r','R','rgb(255,80,80)'],['g','G','rgb(80,220,80)'],['b','B','rgb(80,140,255)']] as [keyof VisibleChannels,string,string][]).map(([ch, lbl, col]) => (
+                      <label key={ch} className="flex items-center gap-1 cursor-pointer select-none group">
+                        <input
+                          type="checkbox"
+                          checked={visibleChannels[ch]}
+                          onChange={() => toggleChannel(ch)}
+                          className="sr-only"
+                        />
+                        <span
+                          onClick={() => toggleChannel(ch)}
+                          className="w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-all"
+                          style={{
+                            borderColor: visibleChannels[ch] ? col : 'rgba(255,255,255,0.2)',
+                            background: visibleChannels[ch] ? col : 'transparent',
+                          }}
+                        >
+                          {visibleChannels[ch] && (
+                            <svg viewBox="0 0 8 8" className="w-2.5 h-2.5" fill="none">
+                              <path d="M1.5 4L3.5 6L6.5 2" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </span>
+                        <span
+                          className="text-xs font-bold font-mono transition-colors"
+                          style={{ color: visibleChannels[ch] ? col : 'rgba(255,255,255,0.2)' }}
+                          onClick={enableAllChannels}
+                          title="Click to enable all channels"
+                        >
+                          {lbl}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <div className="flex items-center gap-2">
                   {histMode === 'hover' && (
                     <label className="flex items-center gap-1 text-xs text-white/40">
