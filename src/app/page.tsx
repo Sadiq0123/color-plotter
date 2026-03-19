@@ -148,11 +148,25 @@ function drawImageWithHighlight(
   lumRanges: [number, number][],
   wheelFilter: { hue: number; sat: number } | null,
   wheelMaxR: number,
-  wheelCursorR: number
+  wheelCursorR: number,
+  visibleChannels: VisibleChannels = { r: true, g: true, b: true }
 ) {
   const ctx = canvas.getContext('2d')!
+  const allVisible = visibleChannels.r && visibleChannels.g && visibleChannels.b
+  const rM = visibleChannels.r ? 1 : 0
+  const gM = visibleChannels.g ? 1 : 0
+  const bM = visibleChannels.b ? 1 : 0
+
   if (lumRanges.length === 0 && !wheelFilter) {
-    ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), width, height), 0, 0)
+    if (allVisible) {
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), width, height), 0, 0)
+      return
+    }
+    const out = new Uint8ClampedArray(pixels.length)
+    for (let i = 0; i < pixels.length; i += 4) {
+      out[i] = pixels[i]*rM; out[i+1] = pixels[i+1]*gM; out[i+2] = pixels[i+2]*bM; out[i+3] = pixels[i+3]
+    }
+    ctx.putImageData(new ImageData(out, width, height), 0, 0)
     return
   }
 
@@ -164,8 +178,8 @@ function drawImageWithHighlight(
     const hovY = wheelFilter.sat * wheelMaxR * Math.sin(hRad)
     const cr2 = wheelCursorR * wheelCursorR
     for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i], g = pixels[i+1], b = pixels[i+2], a = pixels[i+3]
-      const [h, s] = rgbToHsv(r, g, b)
+      const r = pixels[i]*rM, g = pixels[i+1]*gM, b = pixels[i+2]*bM, a = pixels[i+3]
+      const [h, s] = rgbToHsv(pixels[i], pixels[i+1], pixels[i+2])
       const pxX = s * wheelMaxR * Math.cos(h * Math.PI / 180)
       const pxY = s * wheelMaxR * Math.sin(h * Math.PI / 180)
       const dx = pxX - hovX, dy = pxY - hovY
@@ -177,8 +191,8 @@ function drawImageWithHighlight(
     for (const [lo, hi] of lumRanges)
       for (let v = Math.max(0,lo); v <= Math.min(255,hi); v++) covered[v] = 1
     for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i], g = pixels[i+1], b = pixels[i+2], a = pixels[i+3]
-      const lum = (0.299*r + 0.587*g + 0.114*b) | 0
+      const r = pixels[i]*rM, g = pixels[i+1]*gM, b = pixels[i+2]*bM, a = pixels[i+3]
+      const lum = (0.299*pixels[i] + 0.587*pixels[i+1] + 0.114*pixels[i+2]) | 0
       if (covered[lum]) { out[i]=r; out[i+1]=g; out[i+2]=b; out[i+3]=a }
       else { out[i]=r>>3; out[i+1]=g>>3; out[i+2]=b>>3; out[i+3]=a }
     }
@@ -458,7 +472,7 @@ export default function Home() {
       wheelBGRef.current = wheelRef.current.getContext('2d')!.getImageData(0, 0, wheelSize, wheelSize)
     }
     if (imageCanvasRef.current)
-      drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, [], null, wheelMaxR, wheelCursorR)
+      drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, [], null, wheelMaxR, wheelCursorR, visibleChannels)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image, wheelSize])
 
@@ -480,12 +494,12 @@ export default function Home() {
     rafImgRef.current = requestAnimationFrame(() => {
       if (!imageCanvasRef.current) return
       if (wheelHovered) {
-        drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, [], wheelHovered, wheelMaxR, wheelCursorR)
+        drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, [], wheelHovered, wheelMaxR, wheelCursorR, visibleChannels)
       } else {
-        drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, getHistRanges(), null, wheelMaxR, wheelCursorR)
+        drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, getHistRanges(), null, wheelMaxR, wheelCursorR, visibleChannels)
       }
     })
-  }, [image, wheelHovered, histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag, getHistRanges, wheelMaxR, wheelCursorR])
+  }, [image, wheelHovered, histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag, getHistRanges, wheelMaxR, wheelCursorR, visibleChannels])
 
   // Wheel cursor overlay: restore BG then draw circle
   useEffect(() => {
@@ -681,38 +695,31 @@ export default function Home() {
                     )}
                   </p>
                   {/* Channel toggles */}
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-3">
                     {([['r','R','rgb(255,80,80)'],['g','G','rgb(80,220,80)'],['b','B','rgb(80,140,255)']] as [keyof VisibleChannels,string,string][]).map(([ch, lbl, col]) => (
-                      <label key={ch} className="flex items-center gap-1 cursor-pointer select-none group">
-                        <input
-                          type="checkbox"
-                          checked={visibleChannels[ch]}
-                          onChange={() => toggleChannel(ch)}
-                          className="sr-only"
-                        />
-                        <span
+                      <div key={ch} className="flex items-center gap-2 select-none">
+                        <button
                           onClick={() => toggleChannel(ch)}
-                          className="w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-all"
+                          className="w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 cursor-pointer"
                           style={{
-                            borderColor: visibleChannels[ch] ? col : 'rgba(255,255,255,0.2)',
+                            borderColor: visibleChannels[ch] ? col : 'rgba(255,255,255,0.25)',
                             background: visibleChannels[ch] ? col : 'transparent',
                           }}
+                          title={`Toggle ${lbl} channel`}
                         >
                           {visibleChannels[ch] && (
-                            <svg viewBox="0 0 8 8" className="w-2.5 h-2.5" fill="none">
-                              <path d="M1.5 4L3.5 6L6.5 2" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            <svg viewBox="0 0 8 8" className="w-3 h-3" fill="none">
+                              <path d="M1.5 4L3.5 6L6.5 2" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
                           )}
-                        </span>
+                        </button>
                         <span
                           className="text-xs font-bold font-mono transition-colors"
                           style={{ color: visibleChannels[ch] ? col : 'rgba(255,255,255,0.2)' }}
-                          onClick={enableAllChannels}
-                          title="Click to enable all channels"
                         >
                           {lbl}
                         </span>
-                      </label>
+                      </div>
                     ))}
                   </div>
                 </div>
