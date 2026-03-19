@@ -392,11 +392,7 @@ export default function Home() {
   const [visibleChannels, setVisibleChannels] = useState<VisibleChannels>({ r: true, g: true, b: true })
 
   const toggleChannel = useCallback((ch: keyof VisibleChannels) => {
-    setVisibleChannels(prev => {
-      // If the clicked channel is ON and at least one other is OFF → reset all to ON
-      if (prev[ch] && (!prev.r || !prev.g || !prev.b)) return { r: true, g: true, b: true }
-      return { ...prev, [ch]: !prev[ch] }
-    })
+    setVisibleChannels(prev => ({ ...prev, [ch]: !prev[ch] }))
   }, [])
 
   const enableAllChannels = useCallback(() => setVisibleChannels({ r: true, g: true, b: true }), [])
@@ -695,7 +691,7 @@ export default function Home() {
                     )}
                   </p>
                   {/* Channel toggles */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 border-l border-white/10 pl-3">
                     {([['r','R','rgb(255,80,80)'],['g','G','rgb(80,220,80)'],['b','B','rgb(80,140,255)']] as [keyof VisibleChannels,string,string][]).map(([ch, lbl, col]) => (
                       <div key={ch} className="flex items-center gap-2 select-none">
                         <button
@@ -721,6 +717,14 @@ export default function Home() {
                         </span>
                       </div>
                     ))}
+                    {(!visibleChannels.r || !visibleChannels.g || !visibleChannels.b) && (
+                      <button
+                        onClick={enableAllChannels}
+                        className="text-xs px-2 py-0.5 rounded border border-white/20 text-white/40 hover:text-white/70 hover:border-white/40 transition-colors cursor-pointer"
+                      >
+                        all
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
