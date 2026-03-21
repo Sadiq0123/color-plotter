@@ -380,7 +380,7 @@ export default function Home() {
   const [rangeSelection, setRangeSelection] = useState<[number,number] | null>(null)
   const [multiRanges, setMultiRanges] = useState<Array<[number,number]>>([])
   const [activeDrag, setActiveDrag] = useState<[number,number] | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
+  const isDraggingRef = useRef(false)
   const dragStartValueRef = useRef(0)
 
   // ── Color wheel interaction state ────────────────────────────────────────────
@@ -524,58 +524,56 @@ export default function Home() {
     return () => window.removeEventListener('keydown', onKey)
   }, [wheelHovered])
 
-  // ── Histogram mouse handlers ──────────────────────────────────────────────────
+  // ── Histogram pointer handlers (mouse + touch) ───────────────────────────────
 
-  const onHistMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (histMode !== 'hover' || !histRef.current) return
-    const canvas = histRef.current
-    const rect = canvas.getBoundingClientRect()
-    const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width)
-    const pW = canvas.width - HIST_PAD.left - HIST_PAD.right
-    const inPlot = canvasX >= HIST_PAD.left && canvasX <= canvas.width - HIST_PAD.right
-    setHoveredValue(inPlot ? Math.max(0, Math.min(255, Math.round(((canvasX-HIST_PAD.left)/pW)*255))) : null)
-  }, [histMode])
-
-  const onHistMouseLeave = useCallback(() => { if (histMode === 'hover') setHoveredValue(null) }, [histMode])
-
-  const onHistMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if ((histMode !== 'range' && histMode !== 'multi') || !histRef.current) return
-    e.preventDefault()
-    const v = histClientXToValue(histRef.current, e.clientX)
-    dragStartValueRef.current = v
-    setActiveDrag([v, v])
-    setIsDragging(true)
-  }, [histMode])
-
-  useEffect(() => {
-    if (!isDragging) return
-    const onMove = (e: MouseEvent) => {
-      if (!histRef.current) return
+  const onHistPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!histRef.current) return
+    if (isDraggingRef.current) {
       const v = histClientXToValue(histRef.current, e.clientX)
       const lo = Math.min(dragStartValueRef.current, v), hi = Math.max(dragStartValueRef.current, v)
       setActiveDrag([lo, hi])
       if (histMode === 'range') setRangeSelection([lo, hi])
+    } else if (histMode === 'hover') {
+      const canvas = histRef.current
+      const rect = canvas.getBoundingClientRect()
+      const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width)
+      const pW = canvas.width - HIST_PAD.left - HIST_PAD.right
+      const inPlot = canvasX >= HIST_PAD.left && canvasX <= canvas.width - HIST_PAD.right
+      setHoveredValue(inPlot ? Math.max(0, Math.min(255, Math.round(((canvasX-HIST_PAD.left)/pW)*255))) : null)
     }
-    const onUp = (e: MouseEvent) => {
-      setIsDragging(false); setActiveDrag(null)
-      if (!histRef.current) return
-      const v = histClientXToValue(histRef.current, e.clientX)
-      const lo = Math.min(dragStartValueRef.current, v), hi = Math.max(dragStartValueRef.current, v)
-      if (histMode === 'range') {
-        setRangeSelection(hi - lo < 2 ? null : [lo, hi])
-      } else if (histMode === 'multi') {
-        if (hi - lo < 2) setMultiRanges([])
-        else setMultiRanges(prev => [...prev, [lo, hi]])
-      }
+  }, [histMode])
+
+  const onHistPointerLeave = useCallback(() => {
+    if (histMode === 'hover') setHoveredValue(null)
+  }, [histMode])
+
+  const onHistPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if ((histMode !== 'range' && histMode !== 'multi') || !histRef.current) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const v = histClientXToValue(histRef.current, e.clientX)
+    dragStartValueRef.current = v
+    isDraggingRef.current = true
+    setActiveDrag([v, v])
+  }, [histMode])
+
+  const onHistPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDraggingRef.current || !histRef.current) return
+    isDraggingRef.current = false
+    setActiveDrag(null)
+    const v = histClientXToValue(histRef.current, e.clientX)
+    const lo = Math.min(dragStartValueRef.current, v), hi = Math.max(dragStartValueRef.current, v)
+    if (histMode === 'range') {
+      setRangeSelection(hi - lo < 2 ? null : [lo, hi])
+    } else if (histMode === 'multi') {
+      if (hi - lo < 2) setMultiRanges([])
+      else setMultiRanges(prev => [...prev, [lo, hi]])
     }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-  }, [isDragging, histMode])
+  }, [histMode])
 
-  // ── Color wheel mouse handlers ────────────────────────────────────────────────
+  // ── Color wheel pointer handlers (mouse + touch) ──────────────────────────────
 
-  const onWheelMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const onWheelPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = wheelRef.current; if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height
@@ -587,11 +585,11 @@ export default function Home() {
     setWheelHovered({ hue: ((Math.atan2(y,x)*180/Math.PI)+360)%360, sat: r/wheelMaxR })
   }, [wheelMaxR])
 
-  const onWheelMouseLeave = useCallback(() => setWheelHovered(null), [])
+  const onWheelPointerLeave = useCallback(() => setWheelHovered(null), [])
 
-  // ── Image pixel inspector ─────────────────────────────────────────────────────
+  // ── Image pixel inspector (mouse + touch) ─────────────────────────────────────
 
-  const onImgMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const onImgPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = imageCanvasRef.current; if (!canvas || !image) return
     const rect = canvas.getBoundingClientRect()
     const x = Math.floor((e.clientX - rect.left) * (image.width / rect.width))
@@ -601,11 +599,12 @@ export default function Home() {
     setPixelInfo({ r: image.pixels[idx], g: image.pixels[idx+1], b: image.pixels[idx+2], clientX: e.clientX, clientY: e.clientY })
   }, [image])
 
-  const onImgMouseLeave = useCallback(() => setPixelInfo(null), [])
+  const onImgPointerLeave = useCallback(() => setPixelInfo(null), [])
+  const onImgPointerUp = useCallback(() => setPixelInfo(null), [])
 
   const switchMode = useCallback((m: HistMode) => {
     setHistMode(m); setHoveredValue(null); setRangeSelection(null)
-    setMultiRanges([]); setActiveDrag(null); setIsDragging(false)
+    setMultiRanges([]); setActiveDrag(null); isDraggingRef.current = false
   }, [])
 
   const onDragOver = (e: DragEvent) => { e.preventDefault(); setDragging(true) }
@@ -669,11 +668,12 @@ export default function Home() {
             <canvas
               ref={imageCanvasRef}
               width={image.width} height={image.height}
-              className={['rounded-xl shadow-2xl shadow-black/60 cursor-crosshair',
+              className={['rounded-xl shadow-2xl shadow-black/60 cursor-crosshair touch-none',
                 imgFitHeight ? '' : 'max-w-full max-h-full'].join(' ')}
               style={imgCanvasStyle}
-              onMouseMove={onImgMouseMove}
-              onMouseLeave={onImgMouseLeave}
+              onPointerMove={onImgPointerMove}
+              onPointerLeave={onImgPointerLeave}
+              onPointerUp={onImgPointerUp}
             />
           </div>
 
@@ -751,8 +751,9 @@ export default function Home() {
 
               <div className={['rounded-xl overflow-hidden border border-white/10',
                 histMode !== 'hover' ? 'cursor-crosshair' : ''].join(' ')}>
-                <canvas ref={histRef} width={560} height={230} className="w-full block"
-                  onMouseMove={onHistMouseMove} onMouseLeave={onHistMouseLeave} onMouseDown={onHistMouseDown} />
+                <canvas ref={histRef} width={560} height={230} className="w-full block touch-none"
+                  onPointerMove={onHistPointerMove} onPointerLeave={onHistPointerLeave}
+                  onPointerDown={onHistPointerDown} onPointerUp={onHistPointerUp} />
               </div>
 
               {histMode === 'range' && (
@@ -822,8 +823,8 @@ export default function Home() {
               </div>
               <div className="flex justify-center rounded-xl overflow-hidden border border-white/10 bg-[rgb(60,60,60)]">
                 <canvas ref={wheelRef} width={wheelSize} height={wheelSize}
-                  className="w-full max-w-sm block cursor-crosshair"
-                  onMouseMove={onWheelMouseMove} onMouseLeave={onWheelMouseLeave} />
+                  className="w-full max-w-sm block cursor-crosshair touch-none"
+                  onPointerMove={onWheelPointerMove} onPointerLeave={onWheelPointerLeave} />
               </div>
             </div>
 
