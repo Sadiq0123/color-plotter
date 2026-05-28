@@ -836,12 +836,13 @@ export default function Home() {
           const { r, g, b, clientX, clientY } = pixelInfo
           const brightness = Math.round(0.299*r + 0.587*g + 0.114*b)
           const hex = `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`
+          const [hue, sat, val] = rgbToHsv(r, g, b)
           const flipX = clientX > window.innerWidth * 0.45
           const flipY = clientY > window.innerHeight * 0.75
           return (
             <div
               className="fixed z-50 pointer-events-none select-none"
-              style={{ left: flipX ? clientX - 168 : clientX + 14, top: flipY ? clientY - 110 : clientY + 14 }}
+              style={{ left: flipX ? clientX - 168 : clientX + 14, top: flipY ? clientY - 148 : clientY + 14 }}
             >
               <div className="bg-black/85 border border-white/15 rounded-xl px-3 py-2.5 text-xs font-mono text-white backdrop-blur-sm shadow-xl w-40">
                 <div className="flex items-center gap-2 mb-2">
@@ -853,6 +854,9 @@ export default function Home() {
                   <div className="flex justify-between"><span className="text-green-400">G</span><span>{g}</span></div>
                   <div className="flex justify-between"><span className="text-blue-400">B</span><span>{b}</span></div>
                   <div className="flex justify-between border-t border-white/10 pt-0.5 mt-1"><span className="text-white/40">lum</span><span>{brightness}</span></div>
+                  <div className="flex justify-between"><span className="text-violet-400">H</span><span>{Math.round(hue)}°</span></div>
+                  <div className="flex justify-between"><span className="text-violet-400">S</span><span>{Math.round(sat * 100)}%</span></div>
+                  <div className="flex justify-between"><span className="text-violet-400">B</span><span>{Math.round(val * 100)}%</span></div>
                 </div>
               </div>
             </div>
