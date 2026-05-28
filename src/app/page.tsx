@@ -43,6 +43,20 @@ function computeHistCounts(pixels: Uint8ClampedArray): HistCounts {
 }
 
 interface VisibleChannels { r: boolean; g: boolean; b: boolean }
+interface VisibleHsvChannels { h: boolean; s: boolean; v: boolean }
+
+function computeHsvHistCounts(pixels: Uint8ClampedArray): HistCounts {
+  const h = new Uint32Array(256), s = new Uint32Array(256), v = new Uint32Array(256)
+  for (let i = 0; i < pixels.length; i += 4) {
+    const [hv, sv, vv] = rgbToHsv(pixels[i], pixels[i+1], pixels[i+2])
+    h[Math.round(hv / 360 * 255)]++
+    s[Math.round(sv * 255)]++
+    v[Math.round(vv * 255)]++
+  }
+  let max = 0
+  for (let i = 0; i < 256; i++) { if (h[i]>max) max=h[i]; if (s[i]>max) max=s[i]; if (v[i]>max) max=v[i] }
+  return { r: h, g: s, b: v, max }
+}
 
 function drawHistogram(
   canvas: HTMLCanvasElement,
@@ -133,6 +147,111 @@ function drawHistogram(
   ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.fillText('Count',0,0); ctx.restore()
 
   for (const [i,lbl,col,key] of [[0,'R','rgba(255,80,80,0.9)','r'],[1,'G','rgba(80,220,80,0.9)','g'],[2,'B','rgba(80,140,255,0.9)','b']] as [number,string,string,keyof VisibleChannels][]) {
+    ctx.fillStyle = visibleChannels[key] ? col : 'rgba(255,255,255,0.18)'
+    ctx.font='bold 12px monospace'; ctx.textAlign='left'
+    ctx.fillText(lbl, left+i*24, top-8)
+  }
+}
+
+function drawHsvHistogram(
+  canvas: HTMLCanvasElement,
+  counts: HistCounts,
+  ranges: [number, number][],
+  crosshairAt?: number,
+  visibleChannels: VisibleHsvChannels = { h: true, s: true, v: true }
+) {
+  const W = canvas.width, H = canvas.height
+  const { top, right, bottom, left } = HIST_PAD
+  const pW = W - left - right, pH = H - top - bottom
+  const ctx = canvas.getContext('2d')!
+ 
+  ctx.fillStyle = '#0d0d1a'
+  ctx.fillRect(0, 0, W, H)
+ 
+  if (ranges.length > 0) {
+    const covered = new Uint8Array(256)
+    for (const [lo, hi] of ranges)
+      for (let i = Math.max(0,lo); i <= Math.min(255,hi); i++) covered[i] = 1
+ 
+    ctx.fillStyle = 'rgba(0,0,0,0.52)'
+    let runStart = -1
+    for (let i = 0; i <= 256; i++) {
+      if (i < 256 && !covered[i]) { if (runStart < 0) runStart = i }
+      else if (runStart >= 0) {
+        ctx.fillRect(left + (runStart/255)*pW, top, ((i-runStart)/255)*pW, pH)
+        runStart = -1
+      }
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.07)'
+    for (const [lo, hi] of ranges)
+      ctx.fillRect(left + (lo/255)*pW, top, ((hi-lo)/255)*pW, pH)
+  }
+ 
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1
+  for (let i = 0; i <= 4; i++) {
+    const y = top + (i/4)*pH
+    ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(left+pW,y); ctx.stroke()
+  }
+  for (let i = 0; i <= 4; i++) {
+    const x = left + (i/4)*pW
+    ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,top+pH); ctx.stroke()
+  }
+ 
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1
+  ctx.beginPath(); ctx.moveTo(left,top); ctx.lineTo(left,top+pH); ctx.lineTo(left+pW,top+pH); ctx.stroke()
+ 
+  // H=violet, S=cyan, V=amber — using counts.r/g/b as h/s/v buckets
+  for (const [data, color, key] of [
+    [counts.r,'rgba(180,100,255,0.9)','h'],
+    [counts.g,'rgba(80,220,220,0.9)','s'],
+    [counts.b,'rgba(255,190,60,0.9)','v']
+  ] as [Uint32Array,string,keyof VisibleHsvChannels][]) {
+    if (!visibleChannels[key]) continue
+    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.lineJoin='round'
+    for (let i = 0; i < 256; i++) {
+      const x = left + (i/255)*pW, y = top + pH - (data[i]/counts.max)*pH
+      i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y)
+    }
+    ctx.stroke()
+  }
+ 
+  if (ranges.length > 0) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.5; ctx.setLineDash([])
+    ctx.font = '10px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.75)'
+    for (const [lo, hi] of ranges) {
+      const x0 = left+(lo/255)*pW, x1 = left+(hi/255)*pW
+      ctx.beginPath(); ctx.moveTo(x0,top); ctx.lineTo(x0,top+pH); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(x1,top); ctx.lineTo(x1,top+pH); ctx.stroke()
+      ctx.textAlign = x0 < left+pW*0.15 ? 'left' : 'center'
+      ctx.fillText(`${Math.round(lo/255*100)}%`, x0, top-4)
+      ctx.textAlign = x1 > left+pW*0.85 ? 'right' : 'center'
+      ctx.fillText(`${Math.round(hi/255*100)}%`, x1, top-4)
+    }
+  }
+ 
+  if (crosshairAt != null) {
+    const xLine = left + (crosshairAt/255)*pW
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1; ctx.setLineDash([3,3])
+    ctx.beginPath(); ctx.moveTo(xLine,top); ctx.lineTo(xLine,top+pH); ctx.stroke()
+    ctx.setLineDash([])
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '11px monospace'
+    ctx.textAlign = xLine > left+pW*0.8 ? 'right' : 'left'
+    ctx.fillText(`${Math.round(crosshairAt/255*100)}%`, xLine+(xLine > left+pW*0.8 ? -4 : 4), top+14)
+  }
+ 
+  ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.font='11px monospace'; ctx.textAlign='center'
+  for (const [pct,f] of [[0,0],[25,.25],[50,.5],[75,.75],[100,1]] as [number,number][])
+    ctx.fillText(`${pct}%`, left+f*pW, top+pH+16)
+  ctx.fillText('HSV Value', left+pW/2, H-6)
+ 
+  ctx.save(); ctx.translate(14,top+pH/2); ctx.rotate(-Math.PI/2)
+  ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.fillText('Count',0,0); ctx.restore()
+ 
+  for (const [i,lbl,col,key] of [
+    [0,'H','rgba(180,100,255,0.9)','h'],
+    [1,'S','rgba(80,220,220,0.9)','s'],
+    [2,'V','rgba(255,190,60,0.9)','v']
+  ] as [number,string,string,keyof VisibleHsvChannels][]) {
     ctx.fillStyle = visibleChannels[key] ? col : 'rgba(255,255,255,0.18)'
     ctx.font='bold 12px monospace'; ctx.textAlign='left'
     ctx.fillText(lbl, left+i*24, top-8)
@@ -382,7 +501,17 @@ export default function Home() {
   const [activeDrag, setActiveDrag] = useState<[number,number] | null>(null)
   const isDraggingRef = useRef(false)
   const dragStartValueRef = useRef(0)
-
+ 
+  // ── HSV Histogram interaction state ─────────────────────────────────────────
+  const [hsvHistMode, setHsvHistMode] = useState<HistMode>('hover')
+  const [hsvHoveredValue, setHsvHoveredValue] = useState<number | null>(null)
+  const [hsvHoverRadius, setHsvHoverRadius] = useState(10)
+  const [hsvRangeSelection, setHsvRangeSelection] = useState<[number,number] | null>(null)
+  const [hsvMultiRanges, setHsvMultiRanges] = useState<Array<[number,number]>>([])
+  const [hsvActiveDrag, setHsvActiveDrag] = useState<[number,number] | null>(null)
+  const hsvIsDraggingRef = useRef(false)
+  const hsvDragStartValueRef = useRef(0)
+  
   // ── Color wheel interaction state ────────────────────────────────────────────
   const [wheelHovered, setWheelHovered] = useState<{ hue: number; sat: number } | null>(null)
   const [wheelSize, setWheelSize] = useState(420)
@@ -391,12 +520,20 @@ export default function Home() {
   // ── Channel visibility ────────────────────────────────────────────────────────
   const [visibleChannels, setVisibleChannels] = useState<VisibleChannels>({ r: true, g: true, b: true })
 
+  const [visibleHsvChannels, setVisibleHsvChannels] = useState<VisibleHsvChannels>({ h: true, s: true, v: true })
+ 
   const toggleChannel = useCallback((ch: keyof VisibleChannels) => {
     setVisibleChannels(prev => ({ ...prev, [ch]: !prev[ch] }))
   }, [])
 
   const enableAllChannels = useCallback(() => setVisibleChannels({ r: true, g: true, b: true }), [])
-
+ 
+  const toggleHsvChannel = useCallback((ch: keyof VisibleHsvChannels) => {
+    setVisibleHsvChannels(prev => ({ ...prev, [ch]: !prev[ch] }))
+  }, [])
+ 
+  const enableAllHsvChannels = useCallback(() => setVisibleHsvChannels({ h: true, s: true, v: true }), [])
+ 
   // ── Image view state ──────────────────────────────────────────────────────────
   const [imgFitHeight, setImgFitHeight] = useState(false)
 
@@ -407,12 +544,15 @@ export default function Home() {
   const wheelMaxR = wheelSize / 2 - 20
 
   const histRef = useRef<HTMLCanvasElement>(null)
+  const hsvHistRef = useRef<HTMLCanvasElement>(null)
   const wheelRef = useRef<HTMLCanvasElement>(null)
   const imageCanvasRef = useRef<HTMLCanvasElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const histCountsRef = useRef<HistCounts | null>(null)
+  const hsvCountsRef = useRef<HistCounts | null>(null)
   const wheelBGRef = useRef<ImageData | null>(null)
   const rafHistRef = useRef<number | null>(null)
+  const rafHsvHistRef = useRef<number | null>(null)
   const rafImgRef = useRef<number | null>(null)
 
   const getHistRanges = useCallback((): [number,number][] => {
@@ -422,7 +562,15 @@ export default function Home() {
     if (histMode === 'multi') return activeDrag ? [...multiRanges, activeDrag] : [...multiRanges]
     return []
   }, [histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag])
-
+ 
+  const getHsvHistRanges = useCallback((): [number,number][] => {
+    if (hsvHistMode === 'hover' && hsvHoveredValue !== null)
+      return [[Math.max(0, hsvHoveredValue-hsvHoverRadius), Math.min(255, hsvHoveredValue+hsvHoverRadius)]]
+    if (hsvHistMode === 'range' && hsvRangeSelection) return [hsvRangeSelection]
+    if (hsvHistMode === 'multi') return hsvActiveDrag ? [...hsvMultiRanges, hsvActiveDrag] : [...hsvMultiRanges]
+    return []
+  }, [hsvHistMode, hsvHoveredValue, hsvHoverRadius, hsvRangeSelection, hsvMultiRanges, hsvActiveDrag])
+ 
   // ── Image loading ────────────────────────────────────────────────────────────
 
   const processImage = useCallback((img: HTMLImageElement, src: string) => {
@@ -462,7 +610,9 @@ export default function Home() {
   useEffect(() => {
     if (!image) return
     histCountsRef.current = computeHistCounts(image.pixels)
+    hsvCountsRef.current = computeHsvHistCounts(image.pixels)
     if (histRef.current) drawHistogram(histRef.current, histCountsRef.current, [], undefined, visibleChannels)
+    if (hsvHistRef.current) drawHsvHistogram(hsvHistRef.current, hsvCountsRef.current, [], undefined, visibleHsvChannels)
     if (wheelRef.current) {
       drawColorWheel(wheelRef.current, image.pixels)
       wheelBGRef.current = wheelRef.current.getContext('2d')!.getImageData(0, 0, wheelSize, wheelSize)
@@ -482,7 +632,18 @@ export default function Home() {
       drawHistogram(histRef.current!, histCountsRef.current!, ranges, crosshair, visibleChannels)
     )
   }, [histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag, getHistRanges, visibleChannels])
-
+ 
+  // HSV Histogram redraw
+  useEffect(() => {
+    if (!hsvHistRef.current || !hsvCountsRef.current) return
+    const ranges = getHsvHistRanges()
+    const crosshair = hsvHistMode === 'hover' ? (hsvHoveredValue ?? undefined) : undefined
+    if (rafHsvHistRef.current) cancelAnimationFrame(rafHsvHistRef.current)
+    rafHsvHistRef.current = requestAnimationFrame(() =>
+      drawHsvHistogram(hsvHistRef.current!, hsvCountsRef.current!, ranges, crosshair, visibleHsvChannels)
+    )
+  }, [hsvHistMode, hsvHoveredValue, hsvHoverRadius, hsvRangeSelection, hsvMultiRanges, hsvActiveDrag, getHsvHistRanges, visibleHsvChannels])
+ 
   // Image redraw: wheel hover takes precedence over histogram ranges
   useEffect(() => {
     if (!image || !imageCanvasRef.current) return
@@ -606,7 +767,57 @@ export default function Home() {
     setHistMode(m); setHoveredValue(null); setRangeSelection(null)
     setMultiRanges([]); setActiveDrag(null); isDraggingRef.current = false
   }, [])
-
+ 
+  const switchHsvMode = useCallback((m: HistMode) => {
+    setHsvHistMode(m); setHsvHoveredValue(null); setHsvRangeSelection(null)
+    setHsvMultiRanges([]); setHsvActiveDrag(null); hsvIsDraggingRef.current = false
+  }, [])
+ 
+  const onHsvHistPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!hsvHistRef.current) return
+    if (hsvIsDraggingRef.current) {
+      const v = histClientXToValue(hsvHistRef.current, e.clientX)
+      const lo = Math.min(hsvDragStartValueRef.current, v), hi = Math.max(hsvDragStartValueRef.current, v)
+      setHsvActiveDrag([lo, hi])
+      if (hsvHistMode === 'range') setHsvRangeSelection([lo, hi])
+    } else if (hsvHistMode === 'hover') {
+      const canvas = hsvHistRef.current
+      const rect = canvas.getBoundingClientRect()
+      const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width)
+      const pW = canvas.width - HIST_PAD.left - HIST_PAD.right
+      const inPlot = canvasX >= HIST_PAD.left && canvasX <= canvas.width - HIST_PAD.right
+      setHsvHoveredValue(inPlot ? Math.max(0, Math.min(255, Math.round(((canvasX-HIST_PAD.left)/pW)*255))) : null)
+    }
+  }, [hsvHistMode])
+ 
+  const onHsvHistPointerLeave = useCallback(() => {
+    if (hsvHistMode === 'hover') setHsvHoveredValue(null)
+  }, [hsvHistMode])
+ 
+  const onHsvHistPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if ((hsvHistMode !== 'range' && hsvHistMode !== 'multi') || !hsvHistRef.current) return
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const v = histClientXToValue(hsvHistRef.current, e.clientX)
+    hsvDragStartValueRef.current = v
+    hsvIsDraggingRef.current = true
+    setHsvActiveDrag([v, v])
+  }, [hsvHistMode])
+ 
+  const onHsvHistPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!hsvIsDraggingRef.current || !hsvHistRef.current) return
+    hsvIsDraggingRef.current = false
+    setHsvActiveDrag(null)
+    const v = histClientXToValue(hsvHistRef.current, e.clientX)
+    const lo = Math.min(hsvDragStartValueRef.current, v), hi = Math.max(hsvDragStartValueRef.current, v)
+    if (hsvHistMode === 'range') {
+      setHsvRangeSelection(hi - lo < 2 ? null : [lo, hi])
+    } else if (hsvHistMode === 'multi') {
+      if (hi - lo < 2) setHsvMultiRanges([])
+      else setHsvMultiRanges(prev => [...prev, [lo, hi]])
+    }
+  }, [hsvHistMode])
+ 
   const onDragOver = (e: DragEvent) => { e.preventDefault(); setDragging(true) }
   const onDragLeave = () => setDragging(false)
   const onDrop = (e: DragEvent) => {
@@ -795,6 +1006,114 @@ export default function Home() {
               )}
             </div>
 
+            {/* HSV Histogram */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-white/35">
+                    HSV Histogram
+                  </p>
+                  {/* HSV Channel toggles */}
+                  <div className="flex items-center gap-3 border-l border-white/10 pl-3">
+                    {([
+                      ['h','H','rgb(180,100,255)'],
+                      ['s','S','rgb(80,220,220)'],
+                      ['v','V','rgb(255,190,60)']
+                    ] as [keyof VisibleHsvChannels,string,string][]).map(([ch, lbl, col]) => (
+                      <div key={ch} className="flex items-center gap-2 select-none">
+                        <button
+                          onClick={() => toggleHsvChannel(ch)}
+                          className="w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 cursor-pointer"
+                          style={{
+                            borderColor: visibleHsvChannels[ch] ? col : 'rgba(255,255,255,0.25)',
+                            background: visibleHsvChannels[ch] ? col : 'transparent',
+                          }}
+                          title={`Toggle ${lbl} channel`}
+                        >
+                          {visibleHsvChannels[ch] && (
+                            <svg viewBox="0 0 8 8" className="w-3 h-3" fill="none">
+                              <path d="M1.5 4L3.5 6L6.5 2" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </button>
+                        <span
+                          className="text-xs font-bold font-mono transition-colors"
+                          style={{ color: visibleHsvChannels[ch] ? col : 'rgba(255,255,255,0.2)' }}
+                        >
+                          {lbl}
+                        </span>
+                      </div>
+                    ))}
+                    {(!visibleHsvChannels.h || !visibleHsvChannels.s || !visibleHsvChannels.v) && (
+                      <button
+                        onClick={enableAllHsvChannels}
+                        className="text-xs px-2 py-0.5 rounded border border-white/20 text-white/40 hover:text-white/70 hover:border-white/40 transition-colors cursor-pointer"
+                      >
+                        all
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {hsvHistMode === 'hover' && (
+                    <label className="flex items-center gap-1 text-xs text-white/40">
+                      <span>±</span>
+                      <input
+                        type="number" min={1} max={127}
+                        value={hsvHoverRadius}
+                        onChange={e => setHsvHoverRadius(Math.max(1, Math.min(127, Number(e.target.value) || 1)))}
+                        className="w-11 bg-white/5 border border-white/15 rounded px-1.5 py-0.5 text-white/70 text-center text-xs focus:outline-none focus:border-violet-500/60 [appearance:textfield]"
+                      />
+                    </label>
+                  )}
+                  {(['hover','range','multi'] as HistMode[]).map(m => (
+                    <button key={m} onClick={() => switchHsvMode(m)}
+                      className={['px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer',
+                        hsvHistMode === m ? 'bg-violet-600 text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/5'].join(' ')}>
+                      {m === 'hover' ? 'Hover' : m === 'range' ? 'Range' : 'Multi'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+ 
+              <div className={['rounded-xl overflow-hidden border border-white/10',
+                hsvHistMode !== 'hover' ? 'cursor-crosshair' : ''].join(' ')}>
+                <canvas ref={hsvHistRef} width={560} height={230} className="w-full block touch-none"
+                  onPointerMove={onHsvHistPointerMove} onPointerLeave={onHsvHistPointerLeave}
+                  onPointerDown={onHsvHistPointerDown} onPointerUp={onHsvHistPointerUp} />
+              </div>
+ 
+              {hsvHistMode === 'hover' && hsvHoveredValue !== null && (
+                <p className="mt-1.5 text-xs text-white/25">
+                  {Math.round(hsvHoveredValue/255*100)}% ±{Math.round(hsvHoverRadius/255*100)}%
+                </p>
+              )}
+              {hsvHistMode === 'range' && (
+                <div className="mt-1.5 flex items-center justify-between">
+                  <p className="text-xs text-white/25">
+                    Drag to select · click to clear
+                    {hsvRangeSelection && (
+                      <><span className="ml-2 text-white/40">
+                        {Math.round(hsvRangeSelection[0]/255*100)}–{Math.round(hsvRangeSelection[1]/255*100)}%
+                      </span>
+                      <button onClick={() => setHsvRangeSelection(null)} className="ml-2 underline hover:text-white/50 cursor-pointer">clear</button></>
+                    )}
+                  </p>
+                </div>
+              )}
+              {hsvHistMode === 'multi' && (
+                <div className="mt-1.5 flex items-center justify-between">
+                  <p className="text-xs text-white/25">
+                    Drag to add ranges · click anywhere to reset
+                    {hsvMultiRanges.length > 0 && (
+                      <><span className="ml-2 text-white/40">{hsvMultiRanges.length} range{hsvMultiRanges.length>1?'s':''} selected</span>
+                      <button onClick={() => setHsvMultiRanges([])} className="ml-2 underline hover:text-white/50 cursor-pointer">clear all</button></>
+                    )}
+                  </p>
+                </div>
+              )}
+            </div>
+ 
             {/* Color wheel */}
             <div>
               <div className="flex items-center justify-between mb-3">
