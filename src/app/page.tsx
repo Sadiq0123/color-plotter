@@ -268,7 +268,9 @@ function drawImageWithHighlight(
   wheelFilter: { hue: number; sat: number } | null,
   wheelMaxR: number,
   wheelCursorR: number,
-  visibleChannels: VisibleChannels = { r: true, g: true, b: true }
+  visibleChannels: VisibleChannels = { r: true, g: true, b: true },
+  hsvRanges: [number, number][] = [],
+  visibleHsvChannels: VisibleHsvChannels = { h: true, s: true, v: true }
 ) {
   const ctx = canvas.getContext('2d')!
   const allVisible = visibleChannels.r && visibleChannels.g && visibleChannels.b
@@ -276,7 +278,7 @@ function drawImageWithHighlight(
   const gM = visibleChannels.g ? 1 : 0
   const bM = visibleChannels.b ? 1 : 0
 
-  if (lumRanges.length === 0 && !wheelFilter) {
+  if (lumRanges.length === 0 && hsvRanges.length === 0 && !wheelFilter) {
     if (allVisible) {
       ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels), width, height), 0, 0)
       return
@@ -303,6 +305,19 @@ function drawImageWithHighlight(
       const pxY = s * wheelMaxR * Math.sin(h * Math.PI / 180)
       const dx = pxX - hovX, dy = pxY - hovY
       if (dx*dx + dy*dy <= cr2) { out[i]=r; out[i+1]=g; out[i+2]=b; out[i+3]=a }
+      else { out[i]=r>>3; out[i+1]=g>>3; out[i+2]=b>>3; out[i+3]=a }
+    }
+  } else if (hsvRanges.length > 0) {
+    for (let i = 0; i < pixels.length; i += 4) {
+      const r = pixels[i]*rM, g = pixels[i+1]*gM, b = pixels[i+2]*bM, a = pixels[i+3]
+      const [hv, sv, vv] = rgbToHsv(pixels[i], pixels[i+1], pixels[i+2])
+      const hBin = Math.round(hv / 360 * 255)
+      const sBin = Math.round(sv * 255)
+      const vBin = Math.round(vv * 255)
+      const hMatch = !visibleHsvChannels.h || hsvRanges.some(([lo,hi]) => hBin >= lo && hBin <= hi)
+      const sMatch = !visibleHsvChannels.s || hsvRanges.some(([lo,hi]) => sBin >= lo && sBin <= hi)
+      const vMatch = !visibleHsvChannels.v || hsvRanges.some(([lo,hi]) => vBin >= lo && vBin <= hi)
+      if (hMatch && sMatch && vMatch) { out[i]=r; out[i+1]=g; out[i+2]=b; out[i+3]=a }
       else { out[i]=r>>3; out[i+1]=g>>3; out[i+2]=b>>3; out[i+3]=a }
     }
   } else {
@@ -511,6 +526,8 @@ export default function Home() {
   const [hsvActiveDrag, setHsvActiveDrag] = useState<[number,number] | null>(null)
   const hsvIsDraggingRef = useRef(false)
   const hsvDragStartValueRef = useRef(0)
+  const [hsvHistActive, setHsvHistActive] = useState(false)
+  const [rgbHistActive, setRgbHistActive] = useState(false)
   
   // ── Color wheel interaction state ────────────────────────────────────────────
   const [wheelHovered, setWheelHovered] = useState<{ hue: number; sat: number } | null>(null)
@@ -651,12 +668,16 @@ export default function Home() {
     rafImgRef.current = requestAnimationFrame(() => {
       if (!imageCanvasRef.current) return
       if (wheelHovered) {
-        drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, [], wheelHovered, wheelMaxR, wheelCursorR, visibleChannels)
+        drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, [], wheelHovered, wheelMaxR, wheelCursorR, visibleChannels, [], visibleHsvChannels)
+      } else if (hsvHistActive) {
+        drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, [], null, wheelMaxR, wheelCursorR, visibleChannels, getHsvHistRanges(), visibleHsvChannels)
       } else {
-        drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, getHistRanges(), null, wheelMaxR, wheelCursorR, visibleChannels)
+        drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, getHistRanges(), null, wheelMaxR, wheelCursorR, visibleChannels, [], visibleHsvChannels)
       }
     })
-  }, [image, wheelHovered, histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag, getHistRanges, wheelMaxR, wheelCursorR, visibleChannels])
+  }, [image, wheelHovered, histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag, 
+      hsvHistMode, hsvHoveredValue, hsvHoverRadius, hsvRangeSelection, hsvMultiRanges, hsvActiveDrag,
+      getHistRanges, getHsvHistRanges, wheelMaxR, wheelCursorR, visibleChannels, visibleHsvChannels])
 
   // Wheel cursor overlay: restore BG then draw circle
   useEffect(() => {
@@ -688,6 +709,7 @@ export default function Home() {
   // ── Histogram pointer handlers (mouse + touch) ───────────────────────────────
 
   const onHistPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    setRgbHistActive(true)
     if (!histRef.current) return
     if (isDraggingRef.current) {
       const v = histClientXToValue(histRef.current, e.clientX)
@@ -705,6 +727,7 @@ export default function Home() {
   }, [histMode])
 
   const onHistPointerLeave = useCallback(() => {
+    setRgbHistActive(false)
     if (histMode === 'hover') setHoveredValue(null)
   }, [histMode])
 
@@ -774,6 +797,7 @@ export default function Home() {
   }, [])
  
   const onHsvHistPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    setHsvHistActive(true)
     if (!hsvHistRef.current) return
     if (hsvIsDraggingRef.current) {
       const v = histClientXToValue(hsvHistRef.current, e.clientX)
@@ -791,6 +815,7 @@ export default function Home() {
   }, [hsvHistMode])
  
   const onHsvHistPointerLeave = useCallback(() => {
+    setHsvHistActive(false)
     if (hsvHistMode === 'hover') setHsvHoveredValue(null)
   }, [hsvHistMode])
  
