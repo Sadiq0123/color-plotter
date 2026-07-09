@@ -24,10 +24,10 @@ function rgbToHsv(r: number, g: number, b: number): [number, number, number] {
 
 function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
   const hi = Math.floor(h / 60) % 6, f = h / 60 - Math.floor(h / 60)
-  const p = v*(1-s), q = v*(1-f*s), t = v*(1-(1-f)*s)
-  const table: Array<[number,number,number]> = [[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]]
-  const [rn,gn,bn] = table[hi] ?? [0,0,0]
-  return [Math.round(rn*255), Math.round(gn*255), Math.round(bn*255)]
+  const p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s)
+  const table: Array<[number, number, number]> = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]]
+  const [rn, gn, bn] = table[hi] ?? [0, 0, 0]
+  return [Math.round(rn * 255), Math.round(gn * 255), Math.round(bn * 255)]
 }
 
 // ── Histogram ─────────────────────────────────────────────────────────────────
@@ -36,9 +36,9 @@ interface HistCounts { r: Uint32Array; g: Uint32Array; b: Uint32Array; max: numb
 
 function computeHistCounts(pixels: Uint8ClampedArray): HistCounts {
   const r = new Uint32Array(256), g = new Uint32Array(256), b = new Uint32Array(256)
-  for (let i = 0; i < pixels.length; i += 4) { r[pixels[i]]++; g[pixels[i+1]]++; b[pixels[i+2]]++ }
+  for (let i = 0; i < pixels.length; i += 4) { r[pixels[i]]++; g[pixels[i + 1]]++; b[pixels[i + 2]]++ }
   let max = 0
-  for (let v = 0; v < 256; v++) { if (r[v]>max) max=r[v]; if (g[v]>max) max=g[v]; if (b[v]>max) max=b[v] }
+  for (let v = 0; v < 256; v++) { if (r[v] > max) max = r[v]; if (g[v] > max) max = g[v]; if (b[v] > max) max = b[v] }
   return { r, g, b, max }
 }
 
@@ -48,13 +48,13 @@ interface VisibleHsvChannels { h: boolean; s: boolean; v: boolean }
 function computeHsvHistCounts(pixels: Uint8ClampedArray): HistCounts {
   const h = new Uint32Array(256), s = new Uint32Array(256), v = new Uint32Array(256)
   for (let i = 0; i < pixels.length; i += 4) {
-    const [hv, sv, vv] = rgbToHsv(pixels[i], pixels[i+1], pixels[i+2])
+    const [hv, sv, vv] = rgbToHsv(pixels[i], pixels[i + 1], pixels[i + 2])
     h[Math.round(hv / 360 * 255)]++
     s[Math.round(sv * 255)]++
     v[Math.round(vv * 255)]++
   }
   let max = 0
-  for (let i = 0; i < 256; i++) { if (h[i]>max) max=h[i]; if (s[i]>max) max=s[i]; if (v[i]>max) max=v[i] }
+  for (let i = 0; i < 256; i++) { if (h[i] > max) max = h[i]; if (s[i] > max) max = s[i]; if (v[i] > max) max = v[i] }
   return { r: h, g: s, b: v, max }
 }
 
@@ -76,42 +76,42 @@ function drawHistogram(
   if (ranges.length > 0) {
     const covered = new Uint8Array(256)
     for (const [lo, hi] of ranges)
-      for (let v = Math.max(0,lo); v <= Math.min(255,hi); v++) covered[v] = 1
+      for (let v = Math.max(0, lo); v <= Math.min(255, hi); v++) covered[v] = 1
 
     ctx.fillStyle = 'rgba(0,0,0,0.52)'
     let runStart = -1
     for (let v = 0; v <= 256; v++) {
       if (v < 256 && !covered[v]) { if (runStart < 0) runStart = v }
       else if (runStart >= 0) {
-        ctx.fillRect(left + (runStart/255)*pW, top, ((v-runStart)/255)*pW, pH)
+        ctx.fillRect(left + (runStart / 255) * pW, top, ((v - runStart) / 255) * pW, pH)
         runStart = -1
       }
     }
 
     ctx.fillStyle = 'rgba(255,255,255,0.07)'
     for (const [lo, hi] of ranges)
-      ctx.fillRect(left + (lo/255)*pW, top, ((hi-lo)/255)*pW, pH)
+      ctx.fillRect(left + (lo / 255) * pW, top, ((hi - lo) / 255) * pW, pH)
   }
 
   ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1
   for (let i = 0; i <= 4; i++) {
-    const y = top + (i/4)*pH
-    ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(left+pW,y); ctx.stroke()
+    const y = top + (i / 4) * pH
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + pW, y); ctx.stroke()
   }
   for (let i = 0; i <= 4; i++) {
-    const x = left + (i/4)*pW
-    ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,top+pH); ctx.stroke()
+    const x = left + (i / 4) * pW
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + pH); ctx.stroke()
   }
 
   ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1
-  ctx.beginPath(); ctx.moveTo(left,top); ctx.lineTo(left,top+pH); ctx.lineTo(left+pW,top+pH); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, top + pH); ctx.lineTo(left + pW, top + pH); ctx.stroke()
 
-  for (const [data, color, key] of [[counts.r,'rgba(255,80,80,0.9)','r'],[counts.g,'rgba(80,220,80,0.9)','g'],[counts.b,'rgba(80,140,255,0.9)','b']] as [Uint32Array,string,keyof VisibleChannels][]) {
+  for (const [data, color, key] of [[counts.r, 'rgba(255,80,80,0.9)', 'r'], [counts.g, 'rgba(80,220,80,0.9)', 'g'], [counts.b, 'rgba(80,140,255,0.9)', 'b']] as [Uint32Array, string, keyof VisibleChannels][]) {
     if (!visibleChannels[key]) continue
-    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.lineJoin='round'
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'
     for (let v = 0; v < 256; v++) {
-      const x = left + (v/255)*pW, y = top + pH - (data[v]/counts.max)*pH
-      v === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y)
+      const x = left + (v / 255) * pW, y = top + pH - (data[v] / counts.max) * pH
+      v === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
     }
     ctx.stroke()
   }
@@ -120,36 +120,36 @@ function drawHistogram(
     ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.5; ctx.setLineDash([])
     ctx.font = '10px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.75)'
     for (const [lo, hi] of ranges) {
-      const x0 = left+(lo/255)*pW, x1 = left+(hi/255)*pW
-      ctx.beginPath(); ctx.moveTo(x0,top); ctx.lineTo(x0,top+pH); ctx.stroke()
-      ctx.beginPath(); ctx.moveTo(x1,top); ctx.lineTo(x1,top+pH); ctx.stroke()
-      ctx.textAlign = x0 < left+pW*0.15 ? 'left' : 'center'; ctx.fillText(String(lo), x0, top-4)
-      ctx.textAlign = x1 > left+pW*0.85 ? 'right' : 'center'; ctx.fillText(String(hi), x1, top-4)
+      const x0 = left + (lo / 255) * pW, x1 = left + (hi / 255) * pW
+      ctx.beginPath(); ctx.moveTo(x0, top); ctx.lineTo(x0, top + pH); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(x1, top); ctx.lineTo(x1, top + pH); ctx.stroke()
+      ctx.textAlign = x0 < left + pW * 0.15 ? 'left' : 'center'; ctx.fillText(String(lo), x0, top - 4)
+      ctx.textAlign = x1 > left + pW * 0.85 ? 'right' : 'center'; ctx.fillText(String(hi), x1, top - 4)
     }
   }
 
   if (crosshairAt != null) {
-    const xLine = left + (crosshairAt/255)*pW
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1; ctx.setLineDash([3,3])
-    ctx.beginPath(); ctx.moveTo(xLine,top); ctx.lineTo(xLine,top+pH); ctx.stroke()
+    const xLine = left + (crosshairAt / 255) * pW
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3])
+    ctx.beginPath(); ctx.moveTo(xLine, top); ctx.lineTo(xLine, top + pH); ctx.stroke()
     ctx.setLineDash([])
     ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '11px monospace'
-    ctx.textAlign = xLine > left+pW*0.8 ? 'right' : 'left'
-    ctx.fillText(`${crosshairAt}`, xLine+(xLine > left+pW*0.8 ? -4 : 4), top+14)
+    ctx.textAlign = xLine > left + pW * 0.8 ? 'right' : 'left'
+    ctx.fillText(`${crosshairAt}`, xLine + (xLine > left + pW * 0.8 ? -4 : 4), top + 14)
   }
 
-  ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.font='11px monospace'; ctx.textAlign='center'
-  for (const [v,f] of [[0,0],[64,.25],[128,.5],[192,.75],[255,1]] as [number,number][])
-    ctx.fillText(String(v), left+f*pW, top+pH+16)
-  ctx.fillText('Pixel Value', left+pW/2, H-6)
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '11px monospace'; ctx.textAlign = 'center'
+  for (const [v, f] of [[0, 0], [64, .25], [128, .5], [192, .75], [255, 1]] as [number, number][])
+    ctx.fillText(String(v), left + f * pW, top + pH + 16)
+  ctx.fillText('Pixel Value', left + pW / 2, H - 6)
 
-  ctx.save(); ctx.translate(14,top+pH/2); ctx.rotate(-Math.PI/2)
-  ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.fillText('Count',0,0); ctx.restore()
+  ctx.save(); ctx.translate(14, top + pH / 2); ctx.rotate(-Math.PI / 2)
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillText('Count', 0, 0); ctx.restore()
 
-  for (const [i,lbl,col,key] of [[0,'R','rgba(255,80,80,0.9)','r'],[1,'G','rgba(80,220,80,0.9)','g'],[2,'B','rgba(80,140,255,0.9)','b']] as [number,string,string,keyof VisibleChannels][]) {
+  for (const [i, lbl, col, key] of [[0, 'R', 'rgba(255,80,80,0.9)', 'r'], [1, 'G', 'rgba(80,220,80,0.9)', 'g'], [2, 'B', 'rgba(80,140,255,0.9)', 'b']] as [number, string, string, keyof VisibleChannels][]) {
     ctx.fillStyle = visibleChannels[key] ? col : 'rgba(255,255,255,0.18)'
-    ctx.font='bold 12px monospace'; ctx.textAlign='left'
-    ctx.fillText(lbl, left+i*24, top-8)
+    ctx.font = 'bold 12px monospace'; ctx.textAlign = 'left'
+    ctx.fillText(lbl, left + i * 24, top - 8)
   }
 }
 
@@ -164,97 +164,97 @@ function drawHsvHistogram(
   const { top, right, bottom, left } = HIST_PAD
   const pW = W - left - right, pH = H - top - bottom
   const ctx = canvas.getContext('2d')!
- 
+
   ctx.fillStyle = '#0d0d1a'
   ctx.fillRect(0, 0, W, H)
- 
+
   if (ranges.length > 0) {
     const covered = new Uint8Array(256)
     for (const [lo, hi] of ranges)
-      for (let i = Math.max(0,lo); i <= Math.min(255,hi); i++) covered[i] = 1
- 
+      for (let i = Math.max(0, lo); i <= Math.min(255, hi); i++) covered[i] = 1
+
     ctx.fillStyle = 'rgba(0,0,0,0.52)'
     let runStart = -1
     for (let i = 0; i <= 256; i++) {
       if (i < 256 && !covered[i]) { if (runStart < 0) runStart = i }
       else if (runStart >= 0) {
-        ctx.fillRect(left + (runStart/255)*pW, top, ((i-runStart)/255)*pW, pH)
+        ctx.fillRect(left + (runStart / 255) * pW, top, ((i - runStart) / 255) * pW, pH)
         runStart = -1
       }
     }
     ctx.fillStyle = 'rgba(255,255,255,0.07)'
     for (const [lo, hi] of ranges)
-      ctx.fillRect(left + (lo/255)*pW, top, ((hi-lo)/255)*pW, pH)
+      ctx.fillRect(left + (lo / 255) * pW, top, ((hi - lo) / 255) * pW, pH)
   }
- 
+
   ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1
   for (let i = 0; i <= 4; i++) {
-    const y = top + (i/4)*pH
-    ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(left+pW,y); ctx.stroke()
+    const y = top + (i / 4) * pH
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(left + pW, y); ctx.stroke()
   }
   for (let i = 0; i <= 4; i++) {
-    const x = left + (i/4)*pW
-    ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,top+pH); ctx.stroke()
+    const x = left + (i / 4) * pW
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + pH); ctx.stroke()
   }
- 
+
   ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1
-  ctx.beginPath(); ctx.moveTo(left,top); ctx.lineTo(left,top+pH); ctx.lineTo(left+pW,top+pH); ctx.stroke()
- 
+  ctx.beginPath(); ctx.moveTo(left, top); ctx.lineTo(left, top + pH); ctx.lineTo(left + pW, top + pH); ctx.stroke()
+
   // H=violet, S=cyan, V=amber — using counts.r/g/b as h/s/v buckets
   for (const [data, color, key] of [
-    [counts.r,'rgba(180,100,255,0.9)','h'],
-    [counts.g,'rgba(80,220,220,0.9)','s'],
-    [counts.b,'rgba(255,190,60,0.9)','v']
-  ] as [Uint32Array,string,keyof VisibleHsvChannels][]) {
+    [counts.r, 'rgba(180,100,255,0.9)', 'h'],
+    [counts.g, 'rgba(80,220,220,0.9)', 's'],
+    [counts.b, 'rgba(255,190,60,0.9)', 'v']
+  ] as [Uint32Array, string, keyof VisibleHsvChannels][]) {
     if (!visibleChannels[key]) continue
-    ctx.beginPath(); ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.lineJoin='round'
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'
     for (let i = 0; i < 256; i++) {
-      const x = left + (i/255)*pW, y = top + pH - (data[i]/counts.max)*pH
-      i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y)
+      const x = left + (i / 255) * pW, y = top + pH - (data[i] / counts.max) * pH
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
     }
     ctx.stroke()
   }
- 
+
   if (ranges.length > 0) {
     ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.5; ctx.setLineDash([])
     ctx.font = '10px monospace'; ctx.fillStyle = 'rgba(255,255,255,0.75)'
     for (const [lo, hi] of ranges) {
-      const x0 = left+(lo/255)*pW, x1 = left+(hi/255)*pW
-      ctx.beginPath(); ctx.moveTo(x0,top); ctx.lineTo(x0,top+pH); ctx.stroke()
-      ctx.beginPath(); ctx.moveTo(x1,top); ctx.lineTo(x1,top+pH); ctx.stroke()
-      ctx.textAlign = x0 < left+pW*0.15 ? 'left' : 'center'
-      ctx.fillText(`${Math.round(lo/255*100)}%`, x0, top-4)
-      ctx.textAlign = x1 > left+pW*0.85 ? 'right' : 'center'
-      ctx.fillText(`${Math.round(hi/255*100)}%`, x1, top-4)
+      const x0 = left + (lo / 255) * pW, x1 = left + (hi / 255) * pW
+      ctx.beginPath(); ctx.moveTo(x0, top); ctx.lineTo(x0, top + pH); ctx.stroke()
+      ctx.beginPath(); ctx.moveTo(x1, top); ctx.lineTo(x1, top + pH); ctx.stroke()
+      ctx.textAlign = x0 < left + pW * 0.15 ? 'left' : 'center'
+      ctx.fillText(`${Math.round(lo / 255 * 100)}%`, x0, top - 4)
+      ctx.textAlign = x1 > left + pW * 0.85 ? 'right' : 'center'
+      ctx.fillText(`${Math.round(hi / 255 * 100)}%`, x1, top - 4)
     }
   }
- 
+
   if (crosshairAt != null) {
-    const xLine = left + (crosshairAt/255)*pW
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1; ctx.setLineDash([3,3])
-    ctx.beginPath(); ctx.moveTo(xLine,top); ctx.lineTo(xLine,top+pH); ctx.stroke()
+    const xLine = left + (crosshairAt / 255) * pW
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3])
+    ctx.beginPath(); ctx.moveTo(xLine, top); ctx.lineTo(xLine, top + pH); ctx.stroke()
     ctx.setLineDash([])
     ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.font = '11px monospace'
-    ctx.textAlign = xLine > left+pW*0.8 ? 'right' : 'left'
-    ctx.fillText(`${Math.round(crosshairAt/255*100)}%`, xLine+(xLine > left+pW*0.8 ? -4 : 4), top+14)
+    ctx.textAlign = xLine > left + pW * 0.8 ? 'right' : 'left'
+    ctx.fillText(`${Math.round(crosshairAt / 255 * 100)}%`, xLine + (xLine > left + pW * 0.8 ? -4 : 4), top + 14)
   }
- 
-  ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.font='11px monospace'; ctx.textAlign='center'
-  for (const [pct,f] of [[0,0],[25,.25],[50,.5],[75,.75],[100,1]] as [number,number][])
-    ctx.fillText(`${pct}%`, left+f*pW, top+pH+16)
-  ctx.fillText('HSV Value', left+pW/2, H-6)
- 
-  ctx.save(); ctx.translate(14,top+pH/2); ctx.rotate(-Math.PI/2)
-  ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.fillText('Count',0,0); ctx.restore()
- 
-  for (const [i,lbl,col,key] of [
-    [0,'H','rgba(180,100,255,0.9)','h'],
-    [1,'S','rgba(80,220,220,0.9)','s'],
-    [2,'V','rgba(255,190,60,0.9)','v']
-  ] as [number,string,string,keyof VisibleHsvChannels][]) {
+
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '11px monospace'; ctx.textAlign = 'center'
+  for (const [pct, f] of [[0, 0], [25, .25], [50, .5], [75, .75], [100, 1]] as [number, number][])
+    ctx.fillText(`${pct}%`, left + f * pW, top + pH + 16)
+  ctx.fillText('HSV Value', left + pW / 2, H - 6)
+
+  ctx.save(); ctx.translate(14, top + pH / 2); ctx.rotate(-Math.PI / 2)
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillText('Count', 0, 0); ctx.restore()
+
+  for (const [i, lbl, col, key] of [
+    [0, 'H', 'rgba(180,100,255,0.9)', 'h'],
+    [1, 'S', 'rgba(80,220,220,0.9)', 's'],
+    [2, 'V', 'rgba(255,190,60,0.9)', 'v']
+  ] as [number, string, string, keyof VisibleHsvChannels][]) {
     ctx.fillStyle = visibleChannels[key] ? col : 'rgba(255,255,255,0.18)'
-    ctx.font='bold 12px monospace'; ctx.textAlign='left'
-    ctx.fillText(lbl, left+i*24, top-8)
+    ctx.font = 'bold 12px monospace'; ctx.textAlign = 'left'
+    ctx.fillText(lbl, left + i * 24, top - 8)
   }
 }
 
@@ -285,7 +285,7 @@ function drawImageWithHighlight(
     }
     const out = new Uint8ClampedArray(pixels.length)
     for (let i = 0; i < pixels.length; i += 4) {
-      out[i] = pixels[i]*rM; out[i+1] = pixels[i+1]*gM; out[i+2] = pixels[i+2]*bM; out[i+3] = pixels[i+3]
+      out[i] = pixels[i] * rM; out[i + 1] = pixels[i + 1] * gM; out[i + 2] = pixels[i + 2] * bM; out[i + 3] = pixels[i + 3]
     }
     ctx.putImageData(new ImageData(out, width, height), 0, 0)
     return
@@ -299,36 +299,36 @@ function drawImageWithHighlight(
     const hovY = wheelFilter.sat * wheelMaxR * Math.sin(hRad)
     const cr2 = wheelCursorR * wheelCursorR
     for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i]*rM, g = pixels[i+1]*gM, b = pixels[i+2]*bM, a = pixels[i+3]
-      const [h, s] = rgbToHsv(pixels[i], pixels[i+1], pixels[i+2])
+      const r = pixels[i] * rM, g = pixels[i + 1] * gM, b = pixels[i + 2] * bM, a = pixels[i + 3]
+      const [h, s] = rgbToHsv(pixels[i], pixels[i + 1], pixels[i + 2])
       const pxX = s * wheelMaxR * Math.cos(h * Math.PI / 180)
       const pxY = s * wheelMaxR * Math.sin(h * Math.PI / 180)
       const dx = pxX - hovX, dy = pxY - hovY
-      if (dx*dx + dy*dy <= cr2) { out[i]=r; out[i+1]=g; out[i+2]=b; out[i+3]=a }
-      else { out[i]=r>>3; out[i+1]=g>>3; out[i+2]=b>>3; out[i+3]=a }
+      if (dx * dx + dy * dy <= cr2) { out[i] = r; out[i + 1] = g; out[i + 2] = b; out[i + 3] = a }
+      else { out[i] = r >> 3; out[i + 1] = g >> 3; out[i + 2] = b >> 3; out[i + 3] = a }
     }
   } else if (hsvRanges.length > 0) {
     for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i]*rM, g = pixels[i+1]*gM, b = pixels[i+2]*bM, a = pixels[i+3]
-      const [hv, sv, vv] = rgbToHsv(pixels[i], pixels[i+1], pixels[i+2])
+      const r = pixels[i] * rM, g = pixels[i + 1] * gM, b = pixels[i + 2] * bM, a = pixels[i + 3]
+      const [hv, sv, vv] = rgbToHsv(pixels[i], pixels[i + 1], pixels[i + 2])
       const hBin = Math.round(hv / 360 * 255)
       const sBin = Math.round(sv * 255)
       const vBin = Math.round(vv * 255)
-      const hMatch = !visibleHsvChannels.h || hsvRanges.some(([lo,hi]) => hBin >= lo && hBin <= hi)
-      const sMatch = !visibleHsvChannels.s || hsvRanges.some(([lo,hi]) => sBin >= lo && sBin <= hi)
-      const vMatch = !visibleHsvChannels.v || hsvRanges.some(([lo,hi]) => vBin >= lo && vBin <= hi)
-      if (hMatch && sMatch && vMatch) { out[i]=r; out[i+1]=g; out[i+2]=b; out[i+3]=a }
-      else { out[i]=r>>3; out[i+1]=g>>3; out[i+2]=b>>3; out[i+3]=a }
+      const hMatch = !visibleHsvChannels.h || hsvRanges.some(([lo, hi]) => hBin >= lo && hBin <= hi)
+      const sMatch = !visibleHsvChannels.s || hsvRanges.some(([lo, hi]) => sBin >= lo && sBin <= hi)
+      const vMatch = !visibleHsvChannels.v || hsvRanges.some(([lo, hi]) => vBin >= lo && vBin <= hi)
+      if (hMatch && sMatch && vMatch) { out[i] = r; out[i + 1] = g; out[i + 2] = b; out[i + 3] = a }
+      else { out[i] = r >> 3; out[i + 1] = g >> 3; out[i + 2] = b >> 3; out[i + 3] = a }
     }
   } else {
     const covered = new Uint8Array(256)
     for (const [lo, hi] of lumRanges)
-      for (let v = Math.max(0,lo); v <= Math.min(255,hi); v++) covered[v] = 1
+      for (let v = Math.max(0, lo); v <= Math.min(255, hi); v++) covered[v] = 1
     for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i]*rM, g = pixels[i+1]*gM, b = pixels[i+2]*bM, a = pixels[i+3]
-      const lum = (0.299*pixels[i] + 0.587*pixels[i+1] + 0.114*pixels[i+2]) | 0
-      if (covered[lum]) { out[i]=r; out[i+1]=g; out[i+2]=b; out[i+3]=a }
-      else { out[i]=r>>3; out[i+1]=g>>3; out[i+2]=b>>3; out[i+3]=a }
+      const r = pixels[i] * rM, g = pixels[i + 1] * gM, b = pixels[i + 2] * bM, a = pixels[i + 3]
+      const lum = (0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2]) | 0
+      if (covered[lum]) { out[i] = r; out[i + 1] = g; out[i + 2] = b; out[i + 3] = a }
+      else { out[i] = r >> 3; out[i + 1] = g >> 3; out[i + 2] = b >> 3; out[i + 3] = a }
     }
   }
   ctx.putImageData(new ImageData(out, width, height), 0, 0)
@@ -343,14 +343,14 @@ function generateAndDownloadMask(
 ) {
   const covered = new Uint8Array(256)
   for (const [lo, hi] of lumRanges)
-    for (let v = Math.max(0,lo); v <= Math.min(255,hi); v++) covered[v] = 1
+    for (let v = Math.max(0, lo); v <= Math.min(255, hi); v++) covered[v] = 1
 
   const mask = new Uint8ClampedArray(pixels.length)
   for (let i = 0; i < pixels.length; i += 4) {
-    const lum = (0.299*pixels[i] + 0.587*pixels[i+1] + 0.114*pixels[i+2]) | 0
+    const lum = (0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2]) | 0
     const val = covered[lum] ? 255 : 0
-    mask[i] = mask[i+1] = mask[i+2] = val
-    mask[i+3] = 255
+    mask[i] = mask[i + 1] = mask[i + 2] = val
+    mask[i + 3] = 255
   }
 
   const off = document.createElement('canvas')
@@ -368,13 +368,13 @@ function boxBlur(src: Float32Array, size: number, radius: number): Float32Array<
   const tmp = new Float32Array(src.length), out = new Float32Array(src.length)
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     let s = 0, c = 0
-    for (let dx = -radius; dx <= radius; dx++) { const nx=x+dx; if(nx>=0&&nx<size){s+=src[y*size+nx];c++} }
-    tmp[y*size+x] = c > 0 ? s/c : 0
+    for (let dx = -radius; dx <= radius; dx++) { const nx = x + dx; if (nx >= 0 && nx < size) { s += src[y * size + nx]; c++ } }
+    tmp[y * size + x] = c > 0 ? s / c : 0
   }
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     let s = 0, c = 0
-    for (let dy = -radius; dy <= radius; dy++) { const ny=y+dy; if(ny>=0&&ny<size){s+=tmp[ny*size+x];c++} }
-    out[y*size+x] = c > 0 ? s/c : 0
+    for (let dy = -radius; dy <= radius; dy++) { const ny = y + dy; if (ny >= 0 && ny < size) { s += tmp[ny * size + x]; c++ } }
+    out[y * size + x] = c > 0 ? s / c : 0
   }
   return out
 }
@@ -383,55 +383,55 @@ function normalizeDensity(arr: Float32Array): Float32Array {
   let maxV = 0
   for (let i = 0; i < arr.length; i++) if (arr[i] > maxV) maxV = arr[i]
   const logMax = Math.log1p(maxV), out = new Float32Array(arr.length)
-  for (let i = 0; i < arr.length; i++) out[i] = arr[i] > 0 ? Math.log1p(arr[i])/logMax : 0
+  for (let i = 0; i < arr.length; i++) out[i] = arr[i] > 0 ? Math.log1p(arr[i]) / logMax : 0
   return out
 }
 
 // ── Tweak these to change the color wheel heatmap appearance ──────────────────
 const WHEEL_PARAMS = {
-  fillBlurRadius:     5,     // blob spread per blur pass
-  fillBlurPasses:     3,     // passes (more = rounder, Gaussian-like)
-  edgeDilateRadius:   4,     // border thickness in px (circular dilation)
-  heatMaxAlpha:       200,   // max white fill opacity (0–255)
-  heatMinNorm:        0.02,  // hide fill below this density (0–1)
-  edgeHiThresh:       0.12,  // inner threshold for edge detection (0–1)
-  edgeLoThresh:       0.04,  // outer threshold for edge detection (0–1)
-  edgeR:              20,    // border color R
-  edgeG:              20,    // border color G
-  edgeB:              20,    // border color B
-  edgeAlpha:          255,   // border opacity (0–255)
+  fillBlurRadius: 5,     // blob spread per blur pass
+  fillBlurPasses: 3,     // passes (more = rounder, Gaussian-like)
+  edgeDilateRadius: 4,     // border thickness in px (circular dilation)
+  heatMaxAlpha: 200,   // max white fill opacity (0–255)
+  heatMinNorm: 0.02,  // hide fill below this density (0–1)
+  edgeHiThresh: 0.12,  // inner threshold for edge detection (0–1)
+  edgeLoThresh: 0.04,  // outer threshold for edge detection (0–1)
+  edgeR: 20,    // border color R
+  edgeG: 20,    // border color G
+  edgeB: 20,    // border color B
+  edgeAlpha: 255,   // border opacity (0–255)
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
 function drawColorWheel(canvas: HTMLCanvasElement, pixels: Uint8ClampedArray) {
   const P = WHEEL_PARAMS
-  const SIZE = canvas.width, cx = SIZE/2, cy = SIZE/2, maxR = SIZE/2-20
+  const SIZE = canvas.width, cx = SIZE / 2, cy = SIZE / 2, maxR = SIZE / 2 - 20
   const ctx = canvas.getContext('2d')!
 
   const wheelData = ctx.createImageData(SIZE, SIZE)
   for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
-    const dx=x-cx, dy=y-cy, r=Math.sqrt(dx*dx+dy*dy), idx=(y*SIZE+x)*4
+    const dx = x - cx, dy = y - cy, r = Math.sqrt(dx * dx + dy * dy), idx = (y * SIZE + x) * 4
     if (r > maxR) {
-      wheelData.data[idx]=60; wheelData.data[idx+1]=60; wheelData.data[idx+2]=60; wheelData.data[idx+3]=255
+      wheelData.data[idx] = 60; wheelData.data[idx + 1] = 60; wheelData.data[idx + 2] = 60; wheelData.data[idx + 3] = 255
     } else {
-      const hue=((Math.atan2(dy,dx)*180/Math.PI)+360)%360, sat=r/maxR
-      const [rr,gg,bb]=hsvToRgb(hue,sat,1.0)
-      wheelData.data[idx]=rr; wheelData.data[idx+1]=gg; wheelData.data[idx+2]=bb; wheelData.data[idx+3]=255
+      const hue = ((Math.atan2(dy, dx) * 180 / Math.PI) + 360) % 360, sat = r / maxR
+      const [rr, gg, bb] = hsvToRgb(hue, sat, 1.0)
+      wheelData.data[idx] = rr; wheelData.data[idx + 1] = gg; wheelData.data[idx + 2] = bb; wheelData.data[idx + 3] = 255
     }
   }
   ctx.putImageData(wheelData, 0, 0)
 
-  const density = new Float32Array(SIZE*SIZE)
-  const total = pixels.length/4
+  const density = new Float32Array(SIZE * SIZE)
+  const total = pixels.length / 4
   for (let i = 0; i < total; i++) {
-    const [h,s] = rgbToHsv(pixels[i*4],pixels[i*4+1],pixels[i*4+2])
-    const angle=h*Math.PI/180, rad=s*maxR
-    const px=Math.round(cx+rad*Math.cos(angle)), py=Math.round(cy+rad*Math.sin(angle))
-    if (px>=0&&px<SIZE&&py>=0&&py<SIZE) density[py*SIZE+px]++
+    const [h, s] = rgbToHsv(pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2])
+    const angle = h * Math.PI / 180, rad = s * maxR
+    const px = Math.round(cx + rad * Math.cos(angle)), py = Math.round(cy + rad * Math.sin(angle))
+    if (px >= 0 && px < SIZE && py >= 0 && py < SIZE) density[py * SIZE + px]++
   }
 
   let maxD = 0
-  for (let i = 0; i < density.length; i++) if (density[i]>maxD) maxD=density[i]
+  for (let i = 0; i < density.length; i++) if (density[i] > maxD) maxD = density[i]
 
   if (maxD > 0) {
     let blurred = density
@@ -439,50 +439,50 @@ function drawColorWheel(canvas: HTMLCanvasElement, pixels: Uint8ClampedArray) {
     const norm = normalizeDensity(blurred)
 
     const heatData = ctx.createImageData(SIZE, SIZE)
-    for (let i = 0; i < SIZE*SIZE; i++) {
+    for (let i = 0; i < SIZE * SIZE; i++) {
       const t = norm[i]; if (t < P.heatMinNorm) continue
-      heatData.data[i*4]=255; heatData.data[i*4+1]=255; heatData.data[i*4+2]=255
-      heatData.data[i*4+3]=Math.round(t*P.heatMaxAlpha)
+      heatData.data[i * 4] = 255; heatData.data[i * 4 + 1] = 255; heatData.data[i * 4 + 2] = 255
+      heatData.data[i * 4 + 3] = Math.round(t * P.heatMaxAlpha)
     }
 
-    const edgeMask = new Uint8Array(SIZE*SIZE)
-    for (let y=1;y<SIZE-1;y++) for (let x=1;x<SIZE-1;x++) {
-      const i=y*SIZE+x; if (norm[i]<P.edgeHiThresh) continue
-      if (norm[(y-1)*SIZE+x]<P.edgeLoThresh||norm[(y+1)*SIZE+x]<P.edgeLoThresh||
-          norm[y*SIZE+(x-1)]<P.edgeLoThresh||norm[y*SIZE+(x+1)]<P.edgeLoThresh) edgeMask[i]=1
+    const edgeMask = new Uint8Array(SIZE * SIZE)
+    for (let y = 1; y < SIZE - 1; y++) for (let x = 1; x < SIZE - 1; x++) {
+      const i = y * SIZE + x; if (norm[i] < P.edgeHiThresh) continue
+      if (norm[(y - 1) * SIZE + x] < P.edgeLoThresh || norm[(y + 1) * SIZE + x] < P.edgeLoThresh ||
+        norm[y * SIZE + (x - 1)] < P.edgeLoThresh || norm[y * SIZE + (x + 1)] < P.edgeLoThresh) edgeMask[i] = 1
     }
 
     const edgeData = ctx.createImageData(SIZE, SIZE)
-    const dr=P.edgeDilateRadius, dr2=dr*dr
-    for (let y=dr;y<SIZE-dr;y++) for (let x=dr;x<SIZE-dr;x++) {
-      if (!edgeMask[y*SIZE+x]) continue
-      for (let dy=-dr;dy<=dr;dy++) for (let dx=-dr;dx<=dr;dx++) {
-        if (dx*dx+dy*dy>dr2) continue
-        const ni=(y+dy)*SIZE+(x+dx)
-        edgeData.data[ni*4]=P.edgeR; edgeData.data[ni*4+1]=P.edgeG
-        edgeData.data[ni*4+2]=P.edgeB; edgeData.data[ni*4+3]=P.edgeAlpha
+    const dr = P.edgeDilateRadius, dr2 = dr * dr
+    for (let y = dr; y < SIZE - dr; y++) for (let x = dr; x < SIZE - dr; x++) {
+      if (!edgeMask[y * SIZE + x]) continue
+      for (let dy = -dr; dy <= dr; dy++) for (let dx = -dr; dx <= dr; dx++) {
+        if (dx * dx + dy * dy > dr2) continue
+        const ni = (y + dy) * SIZE + (x + dx)
+        edgeData.data[ni * 4] = P.edgeR; edgeData.data[ni * 4 + 1] = P.edgeG
+        edgeData.data[ni * 4 + 2] = P.edgeB; edgeData.data[ni * 4 + 3] = P.edgeAlpha
       }
     }
 
-    const offHeat=document.createElement('canvas'); offHeat.width=SIZE; offHeat.height=SIZE
-    offHeat.getContext('2d')!.putImageData(heatData,0,0)
-    const offEdge=document.createElement('canvas'); offEdge.width=SIZE; offEdge.height=SIZE
-    offEdge.getContext('2d')!.putImageData(edgeData,0,0)
+    const offHeat = document.createElement('canvas'); offHeat.width = SIZE; offHeat.height = SIZE
+    offHeat.getContext('2d')!.putImageData(heatData, 0, 0)
+    const offEdge = document.createElement('canvas'); offEdge.width = SIZE; offEdge.height = SIZE
+    offEdge.getContext('2d')!.putImageData(edgeData, 0, 0)
 
     ctx.save()
-    ctx.beginPath(); ctx.arc(cx,cy,maxR,0,Math.PI*2); ctx.clip()
-    ctx.drawImage(offHeat,0,0); ctx.drawImage(offEdge,0,0)
+    ctx.beginPath(); ctx.arc(cx, cy, maxR, 0, Math.PI * 2); ctx.clip()
+    ctx.drawImage(offHeat, 0, 0); ctx.drawImage(offEdge, 0, 0)
     ctx.restore()
   }
 
-  ctx.beginPath(); ctx.arc(cx,cy,maxR,0,Math.PI*2)
-  ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=1; ctx.stroke()
-  ctx.beginPath(); ctx.arc(cx,cy,3,0,Math.PI*2)
-  ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.fill()
-  ctx.fillStyle='rgba(255,255,255,0.35)'; ctx.font='11px monospace'; ctx.textAlign='center'
-  for (const deg of [0,60,120,180,240,300]) {
-    const rad=deg*Math.PI/180
-    ctx.fillText(`${deg}°`,cx+(maxR+16)*Math.cos(rad),cy+(maxR+16)*Math.sin(rad)+4)
+  ctx.beginPath(); ctx.arc(cx, cy, maxR, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1; ctx.stroke()
+  ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fill()
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '11px monospace'; ctx.textAlign = 'center'
+  for (const deg of [0, 60, 120, 180, 240, 300]) {
+    const rad = deg * Math.PI / 180
+    ctx.fillText(`${deg}°`, cx + (maxR + 16) * Math.cos(rad), cy + (maxR + 16) * Math.sin(rad) + 4)
   }
 }
 
@@ -501,6 +501,7 @@ type HistMode = 'hover' | 'range' | 'multi'
 interface ImageState { src: string; width: number; height: number; pixels: Uint8ClampedArray }
 
 export default function Home() {
+  const [rightTab, setRightTab] = useState<'rgb' | 'hsv' | 'wheel'>('rgb')
   const [image, setImage] = useState<ImageState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [urlInput, setUrlInput] = useState('')
@@ -511,24 +512,24 @@ export default function Home() {
   const [histMode, setHistMode] = useState<HistMode>('hover')
   const [hoveredValue, setHoveredValue] = useState<number | null>(null)
   const [hoverRadius, setHoverRadius] = useState(10)
-  const [rangeSelection, setRangeSelection] = useState<[number,number] | null>(null)
-  const [multiRanges, setMultiRanges] = useState<Array<[number,number]>>([])
-  const [activeDrag, setActiveDrag] = useState<[number,number] | null>(null)
+  const [rangeSelection, setRangeSelection] = useState<[number, number] | null>(null)
+  const [multiRanges, setMultiRanges] = useState<Array<[number, number]>>([])
+  const [activeDrag, setActiveDrag] = useState<[number, number] | null>(null)
   const isDraggingRef = useRef(false)
   const dragStartValueRef = useRef(0)
- 
+
   // ── HSV Histogram interaction state ─────────────────────────────────────────
   const [hsvHistMode, setHsvHistMode] = useState<HistMode>('hover')
   const [hsvHoveredValue, setHsvHoveredValue] = useState<number | null>(null)
   const [hsvHoverRadius, setHsvHoverRadius] = useState(10)
-  const [hsvRangeSelection, setHsvRangeSelection] = useState<[number,number] | null>(null)
-  const [hsvMultiRanges, setHsvMultiRanges] = useState<Array<[number,number]>>([])
-  const [hsvActiveDrag, setHsvActiveDrag] = useState<[number,number] | null>(null)
+  const [hsvRangeSelection, setHsvRangeSelection] = useState<[number, number] | null>(null)
+  const [hsvMultiRanges, setHsvMultiRanges] = useState<Array<[number, number]>>([])
+  const [hsvActiveDrag, setHsvActiveDrag] = useState<[number, number] | null>(null)
   const hsvIsDraggingRef = useRef(false)
   const hsvDragStartValueRef = useRef(0)
   const [hsvHistActive, setHsvHistActive] = useState(false)
   const [rgbHistActive, setRgbHistActive] = useState(false)
-  
+
   // ── Color wheel interaction state ────────────────────────────────────────────
   const [wheelHovered, setWheelHovered] = useState<{ hue: number; sat: number } | null>(null)
   const [wheelSize, setWheelSize] = useState(420)
@@ -538,19 +539,19 @@ export default function Home() {
   const [visibleChannels, setVisibleChannels] = useState<VisibleChannels>({ r: true, g: true, b: true })
 
   const [visibleHsvChannels, setVisibleHsvChannels] = useState<VisibleHsvChannels>({ h: true, s: true, v: true })
- 
+
   const toggleChannel = useCallback((ch: keyof VisibleChannels) => {
     setVisibleChannels(prev => ({ ...prev, [ch]: !prev[ch] }))
   }, [])
 
   const enableAllChannels = useCallback(() => setVisibleChannels({ r: true, g: true, b: true }), [])
- 
+
   const toggleHsvChannel = useCallback((ch: keyof VisibleHsvChannels) => {
     setVisibleHsvChannels(prev => ({ ...prev, [ch]: !prev[ch] }))
   }, [])
- 
+
   const enableAllHsvChannels = useCallback(() => setVisibleHsvChannels({ h: true, s: true, v: true }), [])
- 
+
   // ── Image view state ──────────────────────────────────────────────────────────
   const [imgFitHeight, setImgFitHeight] = useState(false)
 
@@ -572,22 +573,22 @@ export default function Home() {
   const rafHsvHistRef = useRef<number | null>(null)
   const rafImgRef = useRef<number | null>(null)
 
-  const getHistRanges = useCallback((): [number,number][] => {
+  const getHistRanges = useCallback((): [number, number][] => {
     if (histMode === 'hover' && hoveredValue !== null)
-      return [[Math.max(0, hoveredValue-hoverRadius), Math.min(255, hoveredValue+hoverRadius)]]
+      return [[Math.max(0, hoveredValue - hoverRadius), Math.min(255, hoveredValue + hoverRadius)]]
     if (histMode === 'range' && rangeSelection) return [rangeSelection]
     if (histMode === 'multi') return activeDrag ? [...multiRanges, activeDrag] : [...multiRanges]
     return []
   }, [histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag])
- 
-  const getHsvHistRanges = useCallback((): [number,number][] => {
+
+  const getHsvHistRanges = useCallback((): [number, number][] => {
     if (hsvHistMode === 'hover' && hsvHoveredValue !== null)
-      return [[Math.max(0, hsvHoveredValue-hsvHoverRadius), Math.min(255, hsvHoveredValue+hsvHoverRadius)]]
+      return [[Math.max(0, hsvHoveredValue - hsvHoverRadius), Math.min(255, hsvHoveredValue + hsvHoverRadius)]]
     if (hsvHistMode === 'range' && hsvRangeSelection) return [hsvRangeSelection]
     if (hsvHistMode === 'multi') return hsvActiveDrag ? [...hsvMultiRanges, hsvActiveDrag] : [...hsvMultiRanges]
     return []
   }, [hsvHistMode, hsvHoveredValue, hsvHoverRadius, hsvRangeSelection, hsvMultiRanges, hsvActiveDrag])
- 
+
   // ── Image loading ────────────────────────────────────────────────────────────
 
   const processImage = useCallback((img: HTMLImageElement, src: string) => {
@@ -595,10 +596,10 @@ export default function Home() {
     if (w > MAX_DIM || h > MAX_DIM) {
       setError(`Image is ${w}×${h}px — both edges must be ≤ ${MAX_DIM}px.`); return false
     }
-    const off = document.createElement('canvas'); off.width=w; off.height=h
-    const offCtx = off.getContext('2d')!; offCtx.drawImage(img,0,0)
-    const { data } = offCtx.getImageData(0,0,w,h)
-    setImage({ src, width:w, height:h, pixels:data }); setError(null); return true
+    const off = document.createElement('canvas'); off.width = w; off.height = h
+    const offCtx = off.getContext('2d')!; offCtx.drawImage(img, 0, 0)
+    const { data } = offCtx.getImageData(0, 0, w, h)
+    setImage({ src, width: w, height: h, pixels: data }); setError(null); return true
   }, [])
 
   const loadFile = useCallback((file: File) => {
@@ -615,9 +616,9 @@ export default function Home() {
     setLoading(true); setError(null)
     try {
       const res = await fetch(`/api/fetch-image?url=${encodeURIComponent(t)}`)
-      if (!res.ok) { const b=await res.json().catch(()=>({error:'Failed to fetch image'})); setError(b.error); return }
+      if (!res.ok) { const b = await res.json().catch(() => ({ error: 'Failed to fetch image' })); setError(b.error); return }
       const blob = await res.blob(); const url = URL.createObjectURL(blob)
-      const img = new Image(); img.onload=()=>processImage(img,url); img.onerror=()=>setError('Could not decode image.'); img.src=url
+      const img = new Image(); img.onload = () => processImage(img, url); img.onerror = () => setError('Could not decode image.'); img.src = url
     } catch { setError('Network error.') } finally { setLoading(false) }
   }, [urlInput, processImage])
 
@@ -636,7 +637,7 @@ export default function Home() {
     }
     if (imageCanvasRef.current)
       drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, [], null, wheelMaxR, wheelCursorR, visibleChannels)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image, wheelSize])
 
   // Histogram redraw on mode/value change
@@ -649,7 +650,7 @@ export default function Home() {
       drawHistogram(histRef.current!, histCountsRef.current!, ranges, crosshair, visibleChannels)
     )
   }, [histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag, getHistRanges, visibleChannels])
- 
+
   // HSV Histogram redraw
   useEffect(() => {
     if (!hsvHistRef.current || !hsvCountsRef.current) return
@@ -660,7 +661,7 @@ export default function Home() {
       drawHsvHistogram(hsvHistRef.current!, hsvCountsRef.current!, ranges, crosshair, visibleHsvChannels)
     )
   }, [hsvHistMode, hsvHoveredValue, hsvHoverRadius, hsvRangeSelection, hsvMultiRanges, hsvActiveDrag, getHsvHistRanges, visibleHsvChannels])
- 
+
   // Image redraw: wheel hover takes precedence over histogram ranges
   useEffect(() => {
     if (!image || !imageCanvasRef.current) return
@@ -675,9 +676,9 @@ export default function Home() {
         drawImageWithHighlight(imageCanvasRef.current, image.pixels, image.width, image.height, getHistRanges(), null, wheelMaxR, wheelCursorR, visibleChannels, [], visibleHsvChannels)
       }
     })
-  }, [image, wheelHovered, histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag, 
-      hsvHistMode, hsvHoveredValue, hsvHoverRadius, hsvRangeSelection, hsvMultiRanges, hsvActiveDrag,
-      getHistRanges, getHsvHistRanges, wheelMaxR, wheelCursorR, visibleChannels, visibleHsvChannels])
+  }, [image, wheelHovered, histMode, hoveredValue, hoverRadius, rangeSelection, multiRanges, activeDrag,
+    hsvHistMode, hsvHoveredValue, hsvHoverRadius, hsvRangeSelection, hsvMultiRanges, hsvActiveDrag,
+    getHistRanges, getHsvHistRanges, wheelMaxR, wheelCursorR, visibleChannels, visibleHsvChannels])
 
   // Wheel cursor overlay: restore BG then draw circle
   useEffect(() => {
@@ -685,13 +686,13 @@ export default function Home() {
     const ctx = wheelRef.current.getContext('2d')!
     ctx.putImageData(wheelBGRef.current, 0, 0)
     if (!wheelHovered) return
-    const cx = wheelSize/2, cy = wheelSize/2
+    const cx = wheelSize / 2, cy = wheelSize / 2
     const hRad = wheelHovered.hue * Math.PI / 180
     const cursorX = cx + wheelHovered.sat * wheelMaxR * Math.cos(hRad)
     const cursorY = cy + wheelHovered.sat * wheelMaxR * Math.sin(hRad)
-    ctx.beginPath(); ctx.arc(cursorX, cursorY, wheelCursorR, 0, Math.PI*2)
+    ctx.beginPath(); ctx.arc(cursorX, cursorY, wheelCursorR, 0, Math.PI * 2)
     ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2; ctx.stroke()
-    ctx.beginPath(); ctx.arc(cursorX, cursorY, 2.5, 0, Math.PI*2)
+    ctx.beginPath(); ctx.arc(cursorX, cursorY, 2.5, 0, Math.PI * 2)
     ctx.fillStyle = 'white'; ctx.fill()
   }, [wheelHovered, wheelSize, wheelMaxR, wheelCursorR])
 
@@ -699,7 +700,7 @@ export default function Home() {
   useEffect(() => {
     if (!wheelHovered) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp')   { e.preventDefault(); setWheelSize(s => Math.min(600, s + 20)) }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setWheelSize(s => Math.min(600, s + 20)) }
       if (e.key === 'ArrowDown') { e.preventDefault(); setWheelSize(s => Math.max(200, s - 20)) }
     }
     window.addEventListener('keydown', onKey)
@@ -722,7 +723,7 @@ export default function Home() {
       const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width)
       const pW = canvas.width - HIST_PAD.left - HIST_PAD.right
       const inPlot = canvasX >= HIST_PAD.left && canvasX <= canvas.width - HIST_PAD.right
-      setHoveredValue(inPlot ? Math.max(0, Math.min(255, Math.round(((canvasX-HIST_PAD.left)/pW)*255))) : null)
+      setHoveredValue(inPlot ? Math.max(0, Math.min(255, Math.round(((canvasX - HIST_PAD.left) / pW) * 255))) : null)
     }
   }, [histMode])
 
@@ -761,12 +762,12 @@ export default function Home() {
     const canvas = wheelRef.current; if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height
-    const cx = canvas.width/2, cy = canvas.height/2
-    const x = (e.clientX - rect.left)*scaleX - cx
-    const y = (e.clientY - rect.top)*scaleY - cy
-    const r = Math.sqrt(x*x + y*y)
+    const cx = canvas.width / 2, cy = canvas.height / 2
+    const x = (e.clientX - rect.left) * scaleX - cx
+    const y = (e.clientY - rect.top) * scaleY - cy
+    const r = Math.sqrt(x * x + y * y)
     if (r > wheelMaxR) { setWheelHovered(null); return }
-    setWheelHovered({ hue: ((Math.atan2(y,x)*180/Math.PI)+360)%360, sat: r/wheelMaxR })
+    setWheelHovered({ hue: ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360, sat: r / wheelMaxR })
   }, [wheelMaxR])
 
   const onWheelPointerLeave = useCallback(() => setWheelHovered(null), [])
@@ -780,7 +781,7 @@ export default function Home() {
     const y = Math.floor((e.clientY - rect.top) * (image.height / rect.height))
     if (x < 0 || x >= image.width || y < 0 || y >= image.height) return
     const idx = (y * image.width + x) * 4
-    setPixelInfo({ r: image.pixels[idx], g: image.pixels[idx+1], b: image.pixels[idx+2], clientX: e.clientX, clientY: e.clientY })
+    setPixelInfo({ r: image.pixels[idx], g: image.pixels[idx + 1], b: image.pixels[idx + 2], clientX: e.clientX, clientY: e.clientY })
   }, [image])
 
   const onImgPointerLeave = useCallback(() => setPixelInfo(null), [])
@@ -790,12 +791,12 @@ export default function Home() {
     setHistMode(m); setHoveredValue(null); setRangeSelection(null)
     setMultiRanges([]); setActiveDrag(null); isDraggingRef.current = false
   }, [])
- 
+
   const switchHsvMode = useCallback((m: HistMode) => {
     setHsvHistMode(m); setHsvHoveredValue(null); setHsvRangeSelection(null)
     setHsvMultiRanges([]); setHsvActiveDrag(null); hsvIsDraggingRef.current = false
   }, [])
- 
+
   const onHsvHistPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     setHsvHistActive(true)
     if (!hsvHistRef.current) return
@@ -810,15 +811,15 @@ export default function Home() {
       const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width)
       const pW = canvas.width - HIST_PAD.left - HIST_PAD.right
       const inPlot = canvasX >= HIST_PAD.left && canvasX <= canvas.width - HIST_PAD.right
-      setHsvHoveredValue(inPlot ? Math.max(0, Math.min(255, Math.round(((canvasX-HIST_PAD.left)/pW)*255))) : null)
+      setHsvHoveredValue(inPlot ? Math.max(0, Math.min(255, Math.round(((canvasX - HIST_PAD.left) / pW) * 255))) : null)
     }
   }, [hsvHistMode])
- 
+
   const onHsvHistPointerLeave = useCallback(() => {
     setHsvHistActive(false)
     if (hsvHistMode === 'hover') setHsvHoveredValue(null)
   }, [hsvHistMode])
- 
+
   const onHsvHistPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if ((hsvHistMode !== 'range' && hsvHistMode !== 'multi') || !hsvHistRef.current) return
     e.preventDefault()
@@ -828,7 +829,7 @@ export default function Home() {
     hsvIsDraggingRef.current = true
     setHsvActiveDrag([v, v])
   }, [hsvHistMode])
- 
+
   const onHsvHistPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!hsvIsDraggingRef.current || !hsvHistRef.current) return
     hsvIsDraggingRef.current = false
@@ -842,7 +843,7 @@ export default function Home() {
       else setHsvMultiRanges(prev => [...prev, [lo, hi]])
     }
   }, [hsvHistMode])
- 
+
   const onDragOver = (e: DragEvent) => { e.preventDefault(); setDragging(true) }
   const onDragLeave = () => setDragging(false)
   const onDrop = (e: DragEvent) => {
@@ -854,11 +855,11 @@ export default function Home() {
   if (image) {
     const activeRanges = getHistRanges()
     const hasMaskableRange = (histMode === 'range' && rangeSelection !== null) ||
-                             (histMode === 'multi' && multiRanges.length > 0)
+      (histMode === 'multi' && multiRanges.length > 0)
     const maskRanges = histMode === 'range' && rangeSelection ? [rangeSelection] : multiRanges
 
     const rangeLabel = wheelHovered
-      ? `hue ${Math.round(wheelHovered.hue)}° · sat ${(wheelHovered.sat*100).toFixed(0)}%`
+      ? `hue ${Math.round(wheelHovered.hue)}° · sat ${(wheelHovered.sat * 100).toFixed(0)}%`
       : histMode === 'hover' && hoveredValue !== null
         ? `lum ${hoveredValue} ±${hoverRadius}`
         : histMode === 'range' && rangeSelection
@@ -916,8 +917,26 @@ export default function Home() {
           {/* Right: charts */}
           <div className="w-1/2 flex flex-col gap-6 p-6 overflow-y-auto">
 
+            {/* Tab selector */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/10 sticky top-0 z-10 backdrop-blur-sm">
+              {([
+                ['rgb', 'RGB Histogram'],
+                ['hsv', 'HSV Histogram'],
+                ['wheel', 'Color Wheel'],
+              ] as [typeof rightTab, string][]).map(([tab, label]) => (
+                <button
+                  key={tab}
+                  onClick={() => setRightTab(tab)}
+                  className={['flex-1 px-3 py-2 text-xs font-semibold uppercase tracking-widest rounded-lg transition-colors cursor-pointer',
+                    rightTab === tab ? 'bg-violet-600 text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/5'].join(' ')}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {/* Histogram */}
-            <div>
+            <div className={rightTab === 'rgb' ? '' : 'hidden'}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <p className="text-xs font-semibold uppercase tracking-widest text-white/35">
@@ -928,7 +947,7 @@ export default function Home() {
                   </p>
                   {/* Channel toggles */}
                   <div className="flex items-center gap-3 border-l border-white/10 pl-3">
-                    {([['r','R','rgb(255,80,80)'],['g','G','rgb(80,220,80)'],['b','B','rgb(80,140,255)']] as [keyof VisibleChannels,string,string][]).map(([ch, lbl, col]) => (
+                    {([['r', 'R', 'rgb(255,80,80)'], ['g', 'G', 'rgb(80,220,80)'], ['b', 'B', 'rgb(80,140,255)']] as [keyof VisibleChannels, string, string][]).map(([ch, lbl, col]) => (
                       <div key={ch} className="flex items-center gap-2 select-none">
                         <button
                           onClick={() => toggleChannel(ch)}
@@ -941,7 +960,7 @@ export default function Home() {
                         >
                           {visibleChannels[ch] && (
                             <svg viewBox="0 0 8 8" className="w-3 h-3" fill="none">
-                              <path d="M1.5 4L3.5 6L6.5 2" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M1.5 4L3.5 6L6.5 2" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           )}
                         </button>
@@ -975,7 +994,7 @@ export default function Home() {
                       />
                     </label>
                   )}
-                  {(['hover','range','multi'] as HistMode[]).map(m => (
+                  {(['hover', 'range', 'multi'] as HistMode[]).map(m => (
                     <button key={m} onClick={() => switchMode(m)}
                       className={['px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer',
                         histMode === m ? 'bg-violet-600 text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/5'].join(' ')}>
@@ -1015,8 +1034,8 @@ export default function Home() {
                   <p className="text-xs text-white/25">
                     Drag to add ranges · click anywhere to reset
                     {multiRanges.length > 0 && (
-                      <><span className="ml-2 text-white/40">{multiRanges.length} range{multiRanges.length>1?'s':''} selected</span>
-                      <button onClick={() => setMultiRanges([])} className="ml-2 underline hover:text-white/50 cursor-pointer">clear all</button></>
+                      <><span className="ml-2 text-white/40">{multiRanges.length} range{multiRanges.length > 1 ? 's' : ''} selected</span>
+                        <button onClick={() => setMultiRanges([])} className="ml-2 underline hover:text-white/50 cursor-pointer">clear all</button></>
                     )}
                   </p>
                   {multiRanges.length > 0 && !activeDrag && (
@@ -1032,7 +1051,7 @@ export default function Home() {
             </div>
 
             {/* HSV Histogram */}
-            <div>
+            <div className={rightTab === 'hsv' ? '' : 'hidden'}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <p className="text-xs font-semibold uppercase tracking-widest text-white/35">
@@ -1041,10 +1060,10 @@ export default function Home() {
                   {/* HSV Channel toggles */}
                   <div className="flex items-center gap-3 border-l border-white/10 pl-3">
                     {([
-                      ['h','H','rgb(180,100,255)'],
-                      ['s','S','rgb(80,220,220)'],
-                      ['v','V','rgb(255,190,60)']
-                    ] as [keyof VisibleHsvChannels,string,string][]).map(([ch, lbl, col]) => (
+                      ['h', 'H', 'rgb(180,100,255)'],
+                      ['s', 'S', 'rgb(80,220,220)'],
+                      ['v', 'V', 'rgb(255,190,60)']
+                    ] as [keyof VisibleHsvChannels, string, string][]).map(([ch, lbl, col]) => (
                       <div key={ch} className="flex items-center gap-2 select-none">
                         <button
                           onClick={() => toggleHsvChannel(ch)}
@@ -1057,7 +1076,7 @@ export default function Home() {
                         >
                           {visibleHsvChannels[ch] && (
                             <svg viewBox="0 0 8 8" className="w-3 h-3" fill="none">
-                              <path d="M1.5 4L3.5 6L6.5 2" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M1.5 4L3.5 6L6.5 2" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           )}
                         </button>
@@ -1091,7 +1110,7 @@ export default function Home() {
                       />
                     </label>
                   )}
-                  {(['hover','range','multi'] as HistMode[]).map(m => (
+                  {(['hover', 'range', 'multi'] as HistMode[]).map(m => (
                     <button key={m} onClick={() => switchHsvMode(m)}
                       className={['px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer',
                         hsvHistMode === m ? 'bg-violet-600 text-white' : 'text-white/40 hover:text-white/70 hover:bg-white/5'].join(' ')}>
@@ -1100,17 +1119,17 @@ export default function Home() {
                   ))}
                 </div>
               </div>
- 
+
               <div className={['rounded-xl overflow-hidden border border-white/10',
                 hsvHistMode !== 'hover' ? 'cursor-crosshair' : ''].join(' ')}>
                 <canvas ref={hsvHistRef} width={560} height={230} className="w-full block touch-none"
                   onPointerMove={onHsvHistPointerMove} onPointerLeave={onHsvHistPointerLeave}
                   onPointerDown={onHsvHistPointerDown} onPointerUp={onHsvHistPointerUp} />
               </div>
- 
+
               {hsvHistMode === 'hover' && hsvHoveredValue !== null && (
                 <p className="mt-1.5 text-xs text-white/25">
-                  {Math.round(hsvHoveredValue/255*100)}% ±{Math.round(hsvHoverRadius/255*100)}%
+                  {Math.round(hsvHoveredValue / 255 * 100)}% ±{Math.round(hsvHoverRadius / 255 * 100)}%
                 </p>
               )}
               {hsvHistMode === 'range' && (
@@ -1119,9 +1138,9 @@ export default function Home() {
                     Drag to select · click to clear
                     {hsvRangeSelection && (
                       <><span className="ml-2 text-white/40">
-                        {Math.round(hsvRangeSelection[0]/255*100)}–{Math.round(hsvRangeSelection[1]/255*100)}%
+                        {Math.round(hsvRangeSelection[0] / 255 * 100)}–{Math.round(hsvRangeSelection[1] / 255 * 100)}%
                       </span>
-                      <button onClick={() => setHsvRangeSelection(null)} className="ml-2 underline hover:text-white/50 cursor-pointer">clear</button></>
+                        <button onClick={() => setHsvRangeSelection(null)} className="ml-2 underline hover:text-white/50 cursor-pointer">clear</button></>
                     )}
                   </p>
                 </div>
@@ -1131,16 +1150,16 @@ export default function Home() {
                   <p className="text-xs text-white/25">
                     Drag to add ranges · click anywhere to reset
                     {hsvMultiRanges.length > 0 && (
-                      <><span className="ml-2 text-white/40">{hsvMultiRanges.length} range{hsvMultiRanges.length>1?'s':''} selected</span>
-                      <button onClick={() => setHsvMultiRanges([])} className="ml-2 underline hover:text-white/50 cursor-pointer">clear all</button></>
+                      <><span className="ml-2 text-white/40">{hsvMultiRanges.length} range{hsvMultiRanges.length > 1 ? 's' : ''} selected</span>
+                        <button onClick={() => setHsvMultiRanges([])} className="ml-2 underline hover:text-white/50 cursor-pointer">clear all</button></>
                     )}
                   </p>
                 </div>
               )}
             </div>
- 
+
             {/* Color wheel */}
-            <div>
+            <div className={rightTab === 'wheel' ? '' : 'hidden'}>
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-semibold uppercase tracking-widest text-white/35">
                   Hue · Saturation Color Wheel
@@ -1178,8 +1197,8 @@ export default function Home() {
         {/* Pixel inspector tooltip */}
         {pixelInfo && (() => {
           const { r, g, b, clientX, clientY } = pixelInfo
-          const brightness = Math.round(0.299*r + 0.587*g + 0.114*b)
-          const hex = `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`
+          const brightness = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
+          const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
           const [hue, sat, val] = rgbToHsv(r, g, b)
           const flipX = clientX > window.innerWidth * 0.45
           const flipY = clientY > window.innerHeight * 0.75
@@ -1233,7 +1252,7 @@ export default function Home() {
           </div>
           <p className="text-white/20 text-xs">Max {MAX_DIM}×{MAX_DIM}px · JPEG, PNG, WebP, GIF</p>
           <input ref={fileRef} type="file" accept="image/*" className="hidden"
-            onChange={(e: ChangeEvent<HTMLInputElement>) => { const f=e.target.files?.[0]; if(f) loadFile(f) }} />
+            onChange={(e: ChangeEvent<HTMLInputElement>) => { const f = e.target.files?.[0]; if (f) loadFile(f) }} />
         </div>
 
         <div className="flex items-center gap-4 my-5">
@@ -1243,10 +1262,10 @@ export default function Home() {
         </div>
 
         <div className="flex gap-2">
-          <input type="url" value={urlInput} onChange={e=>setUrlInput(e.target.value)}
-            onKeyDown={e=>e.key==='Enter'&&fetchUrl()} placeholder="https://example.com/image.jpg"
+          <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && fetchUrl()} placeholder="https://example.com/image.jpg"
             className="flex-1 bg-white/5 border border-white/15 rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 focus:outline-none focus:border-violet-500/60 focus:bg-white/[0.07] transition-all" />
-          <button onClick={fetchUrl} disabled={loading||!urlInput.trim()}
+          <button onClick={fetchUrl} disabled={loading || !urlInput.trim()}
             className="px-5 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium transition-colors cursor-pointer">
             {loading ? '…' : 'Fetch'}
           </button>
